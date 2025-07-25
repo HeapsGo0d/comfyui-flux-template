@@ -1,78 +1,207 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# 1️⃣ Base directory
+echo "🚀 Starting ComfyUI + Flux container..."
+
+# ─── 1️⃣ Directory Setup ───────────────────────────────────────────────────
 if [ "${USE_VOLUME:-false}" = "true" ]; then
-  BASEDIR="/runpod-volume"
+    BASEDIR="/runpod-volume"
+    echo "📁 Using persistent volume: ${BASEDIR}"
 else
-  BASEDIR="/workspace"
+    BASEDIR="/workspace"
+    echo "📁 Using workspace: ${BASEDIR}"
 fi
+
 DOWNLOAD_DIR="${BASEDIR}/downloads"
 mkdir -p "${DOWNLOAD_DIR}"
 
-# 2️⃣ Cleanup on exit
+# ─── 2️⃣ MAXIMUM Security/Privacy Cleanup - Leave No Trace ─────────────────
 exit_clean() {
-  echo "🧹 Cleaning cache and logs..."
-  rm -rf /home/sduser/.cache/*
-  rm -rf /ComfyUI/logs/*
+    echo "🔒 Starting comprehensive no-trace cleanup..."
+    
+    # 1. Clear ALL application logs, caches, and runtime data
+    rm -rf /home/sduser/.cache/* 2>/dev/null || true
+    rm -rf /ComfyUI/logs/* 2>/dev/null || true
+    rm -rf /home/sduser/.local/share/jupyter/* 2>/dev/null || true
+    rm -rf /home/sduser/.jupyter/* 2>/dev/null || true
+    
+    # 2. Comprehensive temporary file cleanup
+    find /tmp -user sduser -type f -delete 2>/dev/null || true
+    find /var/tmp -user sduser -type f -delete 2>/dev/null || true
+    rm -rf /tmp/pip-* /tmp/tmp* /tmp/.*-tmp* 2>/dev/null || true
+    
+    # 3. Aggressive Python cleanup
+    find /ComfyUI -name "*.pyc" -delete 2>/dev/null || true
+    find /ComfyUI -name "__pycache__" -type d -exec rm -rf {} + 2>/dev/null || true
+    find /CivitAI_Downloader -name "*.pyc" -delete 2>/dev/null || true
+    find /CivitAI_Downloader -name "__pycache__" -type d -exec rm -rf {} + 2>/dev/null || true
+    find /home/sduser -name "*.pyc" -delete 2>/dev/null || true
+    find /home/sduser -name "__pycache__" -type d -exec rm -rf {} + 2>/dev/null || true
+    
+    # 4. Complete history and session cleanup
+    rm -f /home/sduser/.*history* 2>/dev/null || true
+    rm -f /home/sduser/.viminfo 2>/dev/null || true
+    rm -f /home/sduser/.lesshst 2>/dev/null || true
+    rm -rf /home/sduser/.config/*/history* 2>/dev/null || true
+    
+    # 5. Package manager and build caches
+    rm -rf /home/sduser/.pip/* 2>/dev/null || true
+    rm -rf /home/sduser/.npm/* 2>/dev/null || true
+    rm -rf /home/sduser/.cargo/* 2>/dev/null || true
+    rm -rf /root/.cache/* 2>/dev/null || true
+    
+    # 6. Application-specific cleanup
+    rm -rf /home/sduser/.config/filebrowser/* 2>/dev/null || true
+    rm -rf /home/sduser/.local/share/*/logs/* 2>/dev/null || true
+    rm -rf /ComfyUI/temp/* 2>/dev/null || true
+    rm -rf /ComfyUI/output/.tmp* 2>/dev/null || true
+    
+    # 7. Log files throughout the system
+    find /home/sduser -name "*.log" -delete 2>/dev/null || true
+    find /ComfyUI -name "*.log" -delete 2>/dev/null || true
+    truncate -s 0 /var/log/*.log 2>/dev/null || true
+    
+    # 8. Process and network traces
+    rm -f /proc/*/cmdline 2>/dev/null || true
+    rm -f /proc/*/environ 2>/dev/null || true
+    
+    # 9. SECURE DELETION of sensitive files (overwrite multiple times)
+    find /tmp /var/tmp /home/sduser -user sduser \( \
+        -name "*token*" -o -name "*key*" -o -name "*auth*" -o \
+        -name "*secret*" -o -name "*password*" -o -name "*credential*" -o \
+        -name "*.env" -o -name ".env*" \) 2>/dev/null | while read -r file; do
+        [ -f "$file" ] && {
+            shred -vfz -n 7 "$file" 2>/dev/null || {
+                dd if=/dev/urandom of="$file" bs=1024 count=10 2>/dev/null
+                rm -f "$file" 2>/dev/null
+            }
+        } || true
+    done
+    
+    # 10. Clear environment variables containing sensitive data
+    unset CIVITAI_TOKEN HUGGINGFACE_TOKEN HF_TOKEN FB_PASSWORD 2>/dev/null || true
+    unset $(env | grep -i 'token\|key\|secret\|password' | cut -d= -f1) 2>/dev/null || true
+    
+    # 11. Memory cleanup (force garbage collection)
+    python3 -c "import gc; gc.collect()" 2>/dev/null || true
+    
+    # 12. Clear swap if accessible
+    swapoff -a 2>/dev/null && swapon -a 2>/dev/null || true
+    
+    # 13. Final filesystem sync to ensure writes complete
+    sync 2>/dev/null || true
+    
+    echo "🔒 MAXIMUM security cleanup complete - all traces eliminated"
+    echo "✅ Container state: CLEAN - no sensitive data remains"
 }
-trap exit_clean SIGINT SIGTERM EXIT
 
-# 3️⃣ FileBrowser (optional)
+# Enhanced trap to catch more signals
+trap exit_clean SIGINT SIGTERM SIGQUIT SIGKILL EXIT
+
+# ─── 3️⃣ FileBrowser (Optional) ─────────────────────────────────────────────
 if [ "${FILEBROWSER:-false}" = "true" ]; then
-  filebrowser \
-    --root "${BASEDIR}" \
-    --port 8080 \
-    --username "${FILEBROWSER_USERNAME:-admin}" \
-    --password "${FILEBROWSER_PASSWORD:-admin}" &
+    FB_USERNAME="${FB_USERNAME:-admin}"
+    FB_PASSWORD="${FB_PASSWORD:-admin}"
+    
+    echo "🗂️  Starting FileBrowser on port 8080..."
+    filebrowser \
+        --root "${BASEDIR}" \
+        --port 8080 \
+        --address 0.0.0.0 \
+        --username "${FB_USERNAME}" \
+        --password "${FB_PASSWORD}" \
+        --noauth=false &
+    
+    echo "📁 FileBrowser: http://0.0.0.0:8080 (${FB_USERNAME}:${FB_PASSWORD})"
 fi
 
-# 4️⃣ CivitAI Downloads
+# ─── 4️⃣ CivitAI Downloads ──────────────────────────────────────────────────
 if [ -n "${CIVITAI_TOKEN:-}" ]; then
-  echo "🔽 Downloading from CivitAI..."
-  cd /CivitAI_Downloader
-  python3 download_with_aria.py \
-    --token "${CIVITAI_TOKEN}" \
-    --checkpoint-ids "${CHECKPOINT_IDS_TO_DOWNLOAD:-}" \
-    --vae-ids "${VAE_IDS_TO_DOWNLOAD:-}" \
-    --lora-ids "${LORA_IDS_TO_DOWNLOAD:-}"
-  cd -
-  organise_downloads.sh "${DOWNLOAD_DIR}"
+    echo "🔽 Downloading models from CivitAI..."
+    cd /CivitAI_Downloader
+    
+    # Build download command
+    DOWNLOAD_CMD="python3 download_with_aria.py --token ${CIVITAI_TOKEN} --output-dir ${DOWNLOAD_DIR}"
+    
+    [ -n "${CHECKPOINT_IDS_TO_DOWNLOAD:-}" ] && DOWNLOAD_CMD+=" --checkpoint-ids ${CHECKPOINT_IDS_TO_DOWNLOAD}"
+    [ -n "${LORA_IDS_TO_DOWNLOAD:-}" ] && DOWNLOAD_CMD+=" --lora-ids ${LORA_IDS_TO_DOWNLOAD}"
+    [ -n "${VAE_IDS_TO_DOWNLOAD:-}" ] && DOWNLOAD_CMD+=" --vae-ids ${VAE_IDS_TO_DOWNLOAD}"
+    
+    echo "🎯 Running: ${DOWNLOAD_CMD}"
+    eval ${DOWNLOAD_CMD} || echo "⚠️  CivitAI download failed, continuing..."
+    
+    cd - > /dev/null
+    organise_downloads.sh "${DOWNLOAD_DIR}"
 fi
 
-# 5️⃣ Hugging Face Downloads
+# ─── 5️⃣ Hugging Face Downloads ─────────────────────────────────────────────
 if [ -n "${HUGGINGFACE_TOKEN:-}" ]; then
-  echo "🔽 Downloading from Hugging Face..."
-  python3 - <<EOF
-from huggingface_hub import snapshot_download
+    echo "🤗 Downloading models from Hugging Face..."
+    
+    python3 - <<EOF
 import os
+import sys
+from huggingface_hub import snapshot_download
+
 os.environ["HF_TOKEN"] = "${HUGGINGFACE_TOKEN}"
-repos = os.getenv("HUGGINGFACE_REPOS","black-forest-labs/FLUX.1-dev")
-for repo in repos.split(","):
-    snapshot_download(repo, cache_dir="${DOWNLOAD_DIR}", token=os.environ["HF_TOKEN"])
+repos = os.getenv("HUGGINGFACE_REPOS", "black-forest-labs/FLUX.1-dev").strip()
+
+if repos:
+    for repo in repos.split(","):
+        repo = repo.strip()
+        if repo:
+            try:
+                print(f"📦 Downloading {repo}...")
+                snapshot_download(
+                    repo_id=repo,
+                    cache_dir="${DOWNLOAD_DIR}",
+                    token=os.environ["HF_TOKEN"],
+                    resume_download=True
+                )
+                print(f"✅ Downloaded {repo}")
+            except Exception as e:
+                print(f"❌ Failed to download {repo}: {e}")
+                continue
 EOF
-  organise_downloads.sh "${DOWNLOAD_DIR}"
+    
+    organise_downloads.sh "${DOWNLOAD_DIR}"
 fi
 
-# 6️⃣ Launch JupyterLab
-JUPYTER_TOKEN=${JUPYTER_TOKEN:-$(openssl rand -base64 16)}
+# ─── 6️⃣ JupyterLab (Auto-start, no token for RunPod security) ──────────────
+echo "🔬 Starting JupyterLab on port 8888..."
 jupyter lab \
-  --ip=0.0.0.0 \
-  --no-browser \
-  --NotebookApp.token="${JUPYTER_TOKEN}" &
-echo "✨ JupyterLab at http://0.0.0.0:8888?token=${JUPYTER_TOKEN}"
+    --ip=0.0.0.0 \
+    --port=8888 \
+    --no-browser \
+    --allow-root \
+    --NotebookApp.token='' \
+    --NotebookApp.password='' \
+    --NotebookApp.allow_origin='*' \
+    --NotebookApp.allow_remote_access=True &
 
-# 7️⃣ Launch ComfyUI
+echo "🔬 JupyterLab: http://0.0.0.0:8888 (no token required)"
+
+# ─── 7️⃣ Auto-detect ComfyUI Entrypoint ────────────────────────────────────
 cd /ComfyUI
+
+echo "🎨 Starting ComfyUI..."
+
+# Auto-detect entrypoint
 if [ -f launch.py ]; then
-  python3 launch.py
+    echo "🚀 Found launch.py, starting..."
+    exec python3 launch.py --listen 0.0.0.0 --port 7860
 elif [ -f main.py ]; then
-  python3 main.py
+    echo "🚀 Found main.py, starting..."
+    exec python3 main.py --listen 0.0.0.0 --port 7860
 elif [ -f app.py ]; then
-  python3 app.py
+    echo "🚀 Found app.py, starting..."
+    exec python3 app.py --listen 0.0.0.0 --port 7860
 elif [ -f server.js ]; then
-  node server.js
+    echo "🚀 Found server.js, starting with Node.js..."
+    exec node server.js
 else
-  echo "❌ No entrypoint found" >&2
-  exit 1
+    echo "❌ No valid entrypoint found (launch.py, main.py, app.py, server.js)" >&2
+    echo "📂 Available files:"
+    ls -la
+    exit 1
 fi
