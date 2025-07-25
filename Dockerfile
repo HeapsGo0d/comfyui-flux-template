@@ -9,14 +9,17 @@ ENV DEBIAN_FRONTEND=noninteractive \
 # Create non-root user first
 RUN useradd -m -s /bin/bash sduser
 
-# System dependencies
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    python3 python3-pip python3-dev \
-    git wget aria2 curl openssl unzip \
-    build-essential \
-    libjpeg-dev libpng-dev \
-  && rm -rf /var/lib/apt/lists/* \
-  && apt-get clean
+# System dependencies with retry logic for NVIDIA repo sync issues
+RUN for i in 1 2 3; do \
+        apt-get update && break || sleep 10; \
+    done && \
+    apt-get install -y --no-install-recommends \
+        python3 python3-pip python3-dev \
+        git wget aria2 curl openssl unzip \
+        build-essential \
+        libjpeg-dev libpng-dev \
+    && rm -rf /var/lib/apt/lists/* \
+    && apt-get clean
 
 # Upgrade pip and install Python packages
 RUN pip3 install --no-cache-dir --upgrade pip setuptools wheel
