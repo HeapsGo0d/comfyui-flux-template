@@ -25,7 +25,7 @@ RUN pip3 install --no-cache-dir --upgrade pip setuptools wheel && \
     xformers==0.0.27 --no-deps \
     jupyterlab==4.1.0 \
     huggingface_hub==0.17.1 \
-    comfyui-manager==0.3.5 \
+    comfyui-manager \
     requests pillow numpy
 
 # Install FileBrowser
@@ -35,8 +35,8 @@ RUN curl -fsSL \
     && chmod +x /usr/local/bin/filebrowser
 
 # Clone ComfyUI (stable version)
-RUN git clone --depth 1 --branch v1.0.0 \
-    https://github.com/comfyanonymous/ComfyUI.git /ComfyUI
+RUN git clone --depth 1 https://github.com/comfyanonymous/ComfyUI.git /ComfyUI
+
 
 # Clone CivitAI downloader
 RUN git clone --depth 1 \
