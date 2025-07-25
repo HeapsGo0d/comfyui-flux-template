@@ -1,4 +1,4 @@
-# ─── Single-Stage Build (More Reliable) ─────────────────────────────────────
+# ─── Single-Stage Build with Robust Dependencies ───────────────────────────
 FROM nvidia/cuda:12.1.1-devel-ubuntu22.04
 
 ENV DEBIAN_FRONTEND=noninteractive \
@@ -9,9 +9,9 @@ ENV DEBIAN_FRONTEND=noninteractive \
 # Create non-root user first
 RUN useradd -m -s /bin/bash sduser
 
-# System dependencies with retry logic for NVIDIA repo sync issues
+# System dependencies with retry logic
 RUN for i in 1 2 3; do \
-        apt-get update && break || sleep 10; \
+        apt-get update && break || sleep 30; \
     done && \
     apt-get install -y --no-install-recommends \
         python3 python3-pip python3-dev \
@@ -21,7 +21,7 @@ RUN for i in 1 2 3; do \
     && rm -rf /var/lib/apt/lists/* \
     && apt-get clean
 
-# Upgrade pip and install Python packages
+# Upgrade pip and install Python packages with robust dependency resolution
 RUN pip3 install --no-cache-dir --upgrade pip setuptools wheel
 
 # Install PyTorch first (most critical)
@@ -32,17 +32,34 @@ RUN pip3 install --no-cache-dir \
 # Verify PyTorch installation immediately
 RUN python3 -c "import torch; print(f'✅ PyTorch {torch.__version__} installed successfully')"
 
-# Install other dependencies
-RUN pip3 install --no-cache-dir \
-    xformers==0.0.27 --no-deps \
-    jupyterlab==4.1.0 \
-    "huggingface_hub>=0.20" \
-    comfyui-manager \
-    requests pillow numpy aria2 transformers accelerate \
-    einops
+# Create a comprehensive requirements file to handle all dependencies at once
+RUN echo "urllib3>=1.21.1" > /tmp/requirements.txt && \
+    echo "requests>=2.25.1" >> /tmp/requirements.txt && \
+    echo "certifi>=2017.4.17" >> /tmp/requirements.txt && \
+    echo "charset-normalizer>=2.0.0" >> /tmp/requirements.txt && \
+    echo "idna>=2.5" >> /tmp/requirements.txt && \
+    echo "numpy>=1.21.0" >> /tmp/requirements.txt && \
+    echo "pillow>=8.0.0" >> /tmp/requirements.txt && \
+    echo "huggingface_hub>=0.20" >> /tmp/requirements.txt && \
+    echo "transformers>=4.20.0" >> /tmp/requirements.txt && \
+    echo "accelerate>=0.20.0" >> /tmp/requirements.txt && \
+    echo "einops>=0.6.0" >> /tmp/requirements.txt && \
+    echo "jupyterlab==4.1.0" >> /tmp/requirements.txt && \
+    echo "comfyui-manager" >> /tmp/requirements.txt
 
-# Verify critical imports
-RUN python3 -c "import torch, transformers, PIL; print('✅ All critical packages verified')"
+# Install all dependencies with proper resolution
+RUN pip3 install --no-cache-dir -r /tmp/requirements.txt
+
+# Install xformers separately (it's finicky)
+RUN pip3 install --no-cache-dir xformers==0.0.27 --no-deps
+
+# Verify all critical imports step by step
+RUN python3 -c "import urllib3; print('✅ urllib3 available')"
+RUN python3 -c "import requests; print('✅ requests available')"
+RUN python3 -c "import torch; print(f'✅ PyTorch {torch.__version__} available')"
+RUN python3 -c "import PIL; print('✅ PIL available')"
+RUN python3 -c "import transformers; print('✅ transformers available')"
+RUN python3 -c "import torch, transformers, PIL, requests, urllib3; print('✅ All critical packages verified')"
 
 # Install FileBrowser
 RUN curl -fsSL \
@@ -55,7 +72,7 @@ RUN git clone --depth 1 https://github.com/comfyanonymous/ComfyUI.git /ComfyUI
 RUN git clone --depth 1 \
     https://github.com/Hearmeman24/CivitAI_Downloader.git /CivitAI_Downloader
 
-# Install ComfyUI dependencies
+# Install ComfyUI dependencies (this should work now since base deps are solid)
 RUN cd /ComfyUI && pip3 install --no-cache-dir -r requirements.txt
 
 # Copy scripts
@@ -89,9 +106,9 @@ RUN echo 'HISTSIZE=0'          >> /home/sduser/.bashrc && \
 # Final ownership fix
 RUN chown -R sduser:sduser /home/sduser
 
-# Final verification before switching user
-RUN python3 -c "import torch, transformers, comfy.utils; print('✅ All imports successful')" || \
-    (echo "❌ Critical import failure!" && exit 1)
+# Final comprehensive verification
+RUN python3 -c "import torch, transformers, comfy.utils; print('✅ All imports including ComfyUI successful')" || \
+    (echo "❌ Critical import failure!" && python3 -c "import sys; print('Python path:', sys.path)" && exit 1)
 
 # Switch to non-root user
 USER sduser
