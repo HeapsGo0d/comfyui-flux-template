@@ -70,6 +70,13 @@ COPY --from=builder /usr/local/bin/pip* /usr/local/bin/
 COPY --from=builder /ComfyUI /ComfyUI
 COPY --from=builder /CivitAI_Downloader /CivitAI_Downloader
 
+
+# install huggingface_hub and requests for your download scripts
+RUN pip3 install --no-cache-dir \
+        huggingface_hub \
+        requests \
+        aria2
+
 # Copy scripts
 COPY start.sh organise_downloads.sh /usr/local/bin/
 RUN chmod +x /usr/local/bin/start.sh /usr/local/bin/organise_downloads.sh
