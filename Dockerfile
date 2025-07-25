@@ -27,7 +27,8 @@ RUN pip3 install --no-cache-dir --upgrade pip setuptools wheel && \
       jupyterlab==4.1.0 \
       "huggingface_hub>=0.20" \
       comfyui-manager \
-      requests pillow numpy aria2 transformers accelerate
+      requests pillow numpy aria2 transformers accelerate \
+      einops # CHANGED: Explicitly added einops to fix the crash
 
 # Install FileBrowser
 RUN curl -fsSL \
@@ -71,13 +72,14 @@ COPY --from=builder /usr/local/bin/pip*            /usr/local/bin/
 COPY --from=builder /ComfyUI                       /ComfyUI
 COPY --from=builder /CivitAI_Downloader             /CivitAI_Downloader
 
-# Install essential Python packages in runtime stage to ensure they're available
-RUN pip3 install --no-cache-dir \
-      pillow \
-      huggingface_hub>=0.20 \
-      requests \
-      transformers \
-      accelerate
+# CHANGED: This entire block was removed as it is redundant.
+# All packages are now copied from the builder stage.
+# RUN pip3 install --no-cache-dir \
+#       pillow \
+#       huggingface_hub>=0.20 \
+#       requests \
+#       transformers \
+#       accelerate
 
 # Copy scripts
 COPY start.sh organise_downloads.sh /usr/local/bin/
