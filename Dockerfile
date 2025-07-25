@@ -73,7 +73,9 @@ RUN git clone --depth 1 \
     https://github.com/Hearmeman24/CivitAI_Downloader.git /CivitAI_Downloader
 
 # Install ComfyUI dependencies (this should work now since base deps are solid)
-RUN cd /ComfyUI && pip3 install --no-cache-dir -r requirements.txt
+# CHANGED: I've moved WORKDIR here to ensure the following commands run in the correct context.
+WORKDIR /ComfyUI
+RUN pip3 install --no-cache-dir -r requirements.txt
 
 # Copy scripts
 COPY start.sh organise_downloads.sh /usr/local/bin/
@@ -106,13 +108,13 @@ RUN echo 'HISTSIZE=0'          >> /home/sduser/.bashrc && \
 # Final ownership fix
 RUN chown -R sduser:sduser /home/sduser
 
-# Final comprehensive verification
+# Final comprehensive verification (This will now run inside /ComfyUI)
 RUN python3 -c "import torch, transformers, comfy.utils; print('✅ All imports including ComfyUI successful')" || \
     (echo "❌ Critical import failure!" && python3 -c "import sys; print('Python path:', sys.path)" && exit 1)
 
 # Switch to non-root user
 USER sduser
-WORKDIR /ComfyUI
+# The WORKDIR is already set to /ComfyUI from a previous step
 
 # Expose ports
 EXPOSE 7860 8080 8888 3000
