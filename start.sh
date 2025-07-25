@@ -3,7 +3,6 @@ set -euo pipefail
 
 echo "🚀 Starting ComfyUI + Flux container..."
 
-# CHANGED: Moved this entire block to the top to ensure variables are always set first.
 # ─── 1️⃣ Directory Setup ───────────────────────────────────────────────────
 if [ "${USE_VOLUME:-false}" = "true" ]; then
     BASEDIR="/runpod-volume"
@@ -16,11 +15,9 @@ fi
 DOWNLOAD_DIR="${BASEDIR}/downloads"
 mkdir -p "${DOWNLOAD_DIR}"
 
-
 # ─── 2️⃣ MAXIMUM Security/Privacy Cleanup - Leave No Trace ─────────────────
 exit_clean() {
     echo "🔒 Starting comprehensive no-trace cleanup..."
-    # ... (rest of the cleanup function is unchanged)
     
     # 1. Clear ALL application logs, caches, and runtime data
     rm -rf /home/sduser/.cache/* 2>/dev/null || true
@@ -99,8 +96,6 @@ exit_clean() {
     echo "🧼 [exit_clean] Finished secure cleanup at $(date)"
 }
 
-# ... (rest of script is unchanged, just follows the new order) ...
-
 # Enhanced trap to catch more signals
 trap exit_clean SIGINT SIGTERM SIGQUIT SIGKILL EXIT
 
@@ -160,15 +155,15 @@ if [ -n "${CIVITAI_TOKEN:-}" ] && [ "${CIVITAI_TOKEN}" != "*update*" ]; then
     cd - > /dev/null
     organise_downloads.sh "${DOWNLOAD_DIR}"
 else
-    echo "⚠️  CivitAI download failed, continuing..."
+    echo "⚠️  No CivitAI token provided, skipping CivitAI downloads..."
 fi
 
 # ─── 5️⃣ Hugging Face Downloads ─────────────────────────────────────────────
 echo "🤗 Downloading models from Hugging Face..."
 
-# This pip install is a safeguard and will only run if needed.
+# Ensure huggingface_hub is installed
 echo "🔧 Verifying huggingface_hub installation..."
-python3 -m pip install huggingface_hub
+python3 -m pip install --user huggingface_hub
 
 python3 - <<EOF
 import os
@@ -237,27 +232,61 @@ fi
 echo "🔍 Verifying Python dependencies..."
 python3 - <<EOF
 import sys
-try:
-    from PIL import Image
-    print("✅ PIL/Pillow is available")
-except ImportError as e:
-    print(f"❌ PIL/Pillow missing: {e}")
-    print("🔧 Installing Pillow...")
-    import subprocess
-    subprocess.run([sys.executable, "-m", "pip", "install", "pillow"], check=True)
-    print("✅ Pillow installed successfully")
 
-try:
-    import torch
-    print(f"✅ PyTorch {torch.__version__} is available")
-except ImportError as e:
-    print(f"❌ PyTorch missing: {e}")
+# Critical dependency check with installation fallback
+def check_and_install(package_name, import_name=None, install_cmd=None):
+    import_name = import_name or package_name
+    install_cmd = install_cmd or package_name
+    
+    try:
+        __import__(import_name)
+        if import_name == 'torch':
+            import torch
+            print(f"✅ PyTorch {torch.__version__} is available")
+        elif import_name == 'PIL':
+            print("✅ PIL/Pillow is available")
+        else:
+            print(f"✅ {package_name} is available")
+        return True
+    except ImportError as e:
+        print(f"❌ {package_name} missing: {e}")
+        if install_cmd:
+            print(f"🔧 Installing {package_name}...")
+            import subprocess
+            try:
+                if package_name == 'torch':
+                    # Install PyTorch with CUDA support
+                    subprocess.run([
+                        sys.executable, "-m", "pip", "install", "--user",
+                        "torch==2.3.1+cu121", "torchvision==0.18.1+cu121", "torchaudio==2.3.1+cu121",
+                        "--index-url", "https://download.pytorch.org/whl/cu121"
+                    ], check=True)
+                else:
+                    subprocess.run([sys.executable, "-m", "pip", "install", "--user", install_cmd], check=True)
+                print(f"✅ {package_name} installed successfully")
+                return True
+            except subprocess.CalledProcessError:
+                print(f"❌ Failed to install {package_name}")
+                return False
+        return False
 
+# Check critical dependencies
+all_good = True
+all_good &= check_and_install("PIL/Pillow", "PIL", "pillow")
+all_good &= check_and_install("PyTorch", "torch", "torch")
+all_good &= check_and_install("Transformers", "transformers", "transformers")
+
+if not all_good:
+    print("❌ Some critical dependencies are missing!")
+    sys.exit(1)
+
+# Final ComfyUI import test
 try:
-    import transformers
-    print(f"✅ Transformers is available")
+    import comfy.utils
+    print("✅ ComfyUI imports successful")
 except ImportError as e:
-    print(f"❌ Transformers missing: {e}")
+    print(f"❌ ComfyUI import failed: {e}")
+    print("This might be normal if ComfyUI has additional setup requirements")
 EOF
 
 # ─── 8️⃣ Auto-detect ComfyUI Entrypoint ────────────────────────────────────
