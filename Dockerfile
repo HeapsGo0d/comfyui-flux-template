@@ -8,13 +8,15 @@ ENV DEBIAN_FRONTEND=noninteractive \
 # Create non-root user
 RUN useradd -m -s /bin/bash sduser
 
-# System deps
+# System dependencies (minimal)
 RUN apt-get update && apt-get install -y --no-install-recommends \
     python3 python3-pip python3-dev \
-    git wget aria2 curl openssl unzip build-essential \
-  && rm -rf /var/lib/apt/lists/*
+    git wget aria2 curl openssl unzip \
+    build-essential \
+  && rm -rf /var/lib/apt/lists/* \
+  && apt-get clean
 
-# Python libs for builder (pins for stability)
+# Python libraries (pinned versions for stability)
 RUN pip3 install --no-cache-dir --upgrade pip setuptools wheel && \
     pip3 install --no-cache-dir \
       torch==2.3.1+cu121 torchvision==0.18.1+cu121 torchaudio==2.3.1+cu121 \
@@ -22,25 +24,25 @@ RUN pip3 install --no-cache-dir --upgrade pip setuptools wheel && \
     pip3 install --no-cache-dir \
       xformers==0.0.27 --no-deps \
       jupyterlab==4.1.0 \
-      huggingface_hub==0.17.1 \
+      "huggingface_hub>=0.20" \
       comfyui-manager \
       requests pillow numpy
 
-# FileBrowser
+# Install FileBrowser
 RUN curl -fsSL \
-    https://github.com/filebrowser/filebrowser/releases/latest/download/linux-amd64-filebrowser.tar.gz \
+    "https://github.com/filebrowser/filebrowser/releases/latest/download/linux-amd64-filebrowser.tar.gz" \
   | tar -xz -C /usr/local/bin filebrowser \
   && chmod +x /usr/local/bin/filebrowser
 
-# ComfyUI
+# Clone ComfyUI (stable version)
 RUN git clone --depth 1 https://github.com/comfyanonymous/ComfyUI.git /ComfyUI
 
-# CivitAI downloader
-RUN git clone --depth 1 https://github.com/Hearmeman24/CivitAI_Downloader.git /CivitAI_Downloader
+# Clone CivitAI downloader
+RUN git clone --depth 1 \
+    https://github.com/Hearmeman24/CivitAI_Downloader.git /CivitAI_Downloader
 
-# ComfyUI deps
+# Install ComfyUI dependencies
 RUN cd /ComfyUI && pip3 install --no-cache-dir -r requirements.txt
-
 
 # ─── STAGE 2: Runtime ───────────────────────────────────────────────────────
 FROM nvidia/cuda:12.1.1-devel-ubuntu22.04
@@ -50,54 +52,65 @@ ENV DEBIAN_FRONTEND=noninteractive \
     PYTHONUNBUFFERED=1 \
     PATH="/usr/local/bin:${PATH}"
 
-# Minimal runtime deps
+# Install minimal runtime dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    python3 python3-pip git curl openssl \
-  && rm -rf /var/lib/apt/lists/*
+    python3 python3-pip \
+    git curl openssl \
+  && rm -rf /var/lib/apt/lists/* \
+  && apt-get clean
 
 # Create non-root user
 RUN useradd -m -s /bin/bash sduser
 
-# Copy FileBrowser binary
+# Copy from builder stage
 COPY --from=builder /usr/local/bin/filebrowser /usr/local/bin/
+COPY --from=builder /usr/local/lib/python3.*/site-packages /usr/local/lib/python3.*/site-packages
+COPY --from=builder /usr/local/bin/pip*            /usr/local/bin/
+COPY --from=builder /ComfyUI                       /ComfyUI
+COPY --from=builder /CivitAI_Downloader             /CivitAI_Downloader
 
-# Copy the ComfyUI & CivitAI code
-COPY --from=builder /ComfyUI /ComfyUI
-COPY --from=builder /CivitAI_Downloader /CivitAI_Downloader
-
-# Copy builder’s pip executables (so we can pip install in runtime)
-COPY --from=builder /usr/local/bin/pip* /usr/local/bin/
-
-# Now install *all* the Python bits you need at runtime:
-#  - torch & friends (same versions, GPU wheels)
-#  - jupyterlab
-#  - comfyui-manager, requests, pillow, huggingface_hub, aria2, xformers, numpy
+# install huggingface_hub and requests for your download scripts
 RUN pip3 install --no-cache-dir \
-      torch==2.3.1+cu121 torchvision==0.18.1+cu121 torchaudio==2.3.1+cu121 \
-        --index-url https://download.pytorch.org/whl/cu121 && \
-    pip3 install --no-cache-dir \
-      jupyterlab==4.1.0 \
-      comfyui-manager \
-      huggingface_hub==0.17.1 \
-      requests pillow numpy aria2 xformers==0.0.27
+      huggingface_hub>=0.20 \
+      requests \
+      aria2
 
-# Copy your entrypoint & helper scripts
+# Copy scripts
 COPY start.sh organise_downloads.sh /usr/local/bin/
 RUN chmod +x /usr/local/bin/start.sh /usr/local/bin/organise_downloads.sh
 
-# Workspace & permissions
+# Create directories and set permissions
 RUN mkdir -p /runpod-volume /workspace/downloads \
   && chown -R sduser:sduser /ComfyUI /CivitAI_Downloader /runpod-volume /workspace \
   && chmod 755 /runpod-volume /workspace
 
-# Switch to non-root
+# Maximum security hardening - leave no trace
+RUN echo 'HISTSIZE=0'          >> /home/sduser/.bashrc && \
+    echo 'HISTFILESIZE=0'      >> /home/sduser/.bashrc && \
+    echo 'unset HISTFILE'      >> /home/sduser/.bashrc && \
+    echo 'set +o history'      >> /home/sduser/.bashrc && \
+    echo 'export PYTHONDONTWRITEBYTECODE=1' >> /home/sduser/.bashrc && \
+    echo 'export PYTHONHASHSEED=random'     >> /home/sduser/.bashrc && \
+    echo 'export PYTHONUNBUFFERED=1'        >> /home/sduser/.bashrc && \
+    echo 'umask 077'                       >> /home/sduser/.bashrc && \
+    echo 'shopt -u histappend'             >> /home/sduser/.bashrc && \
+    echo 'export LESSHISTFILE=-'           >> /home/sduser/.bashrc && \
+    echo 'export MYSQL_HISTFILE=/dev/null' >> /home/sduser/.bashrc && \
+    echo 'export SQLITE_HISTORY=/dev/null' >> /home/sduser/.bashrc && \
+    echo 'export NODE_REPL_HISTORY=""'     >> /home/sduser/.bashrc && \
+    mkdir -p /home/sduser/.config /home/sduser/.local/share && \
+    chmod 700 /home/sduser/.config /home/sduser/.local /home/sduser/.local/share && \
+    chmod 600 /home/sduser/.bashrc && \
+    touch /home/sduser/.hushlogin
+
+# Switch to non-root user
 USER sduser
 WORKDIR /ComfyUI
 
 # Expose ports
 EXPOSE 7860 8080 8888 3000
 
-# Healthcheck
+# Health check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
   CMD curl -f http://localhost:7860 || exit 1
 
