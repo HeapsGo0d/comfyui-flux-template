@@ -13,6 +13,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     python3 python3-pip python3-dev \
     git wget aria2 curl openssl unzip \
     build-essential \
+    libjpeg-dev libpng-dev \
   && rm -rf /var/lib/apt/lists/* \
   && apt-get clean
 
@@ -26,7 +27,7 @@ RUN pip3 install --no-cache-dir --upgrade pip setuptools wheel && \
       jupyterlab==4.1.0 \
       "huggingface_hub>=0.20" \
       comfyui-manager \
-      requests pillow numpy
+      requests pillow numpy aria2 transformers accelerate
 
 # Install FileBrowser
 RUN curl -fsSL \
@@ -52,10 +53,11 @@ ENV DEBIAN_FRONTEND=noninteractive \
     PYTHONUNBUFFERED=1 \
     PATH="/usr/local/bin:${PATH}"
 
-# Install minimal runtime dependencies
+# Install minimal runtime dependencies INCLUDING image libraries
 RUN apt-get update && apt-get install -y --no-install-recommends \
     python3 python3-pip \
     git curl openssl \
+    libjpeg-dev libpng-dev \
   && rm -rf /var/lib/apt/lists/* \
   && apt-get clean
 
@@ -69,11 +71,13 @@ COPY --from=builder /usr/local/bin/pip*            /usr/local/bin/
 COPY --from=builder /ComfyUI                       /ComfyUI
 COPY --from=builder /CivitAI_Downloader             /CivitAI_Downloader
 
-# install huggingface_hub and requests for your download scripts
+# Install essential Python packages in runtime stage to ensure they're available
 RUN pip3 install --no-cache-dir \
+      pillow \
       huggingface_hub>=0.20 \
       requests \
-      aria2
+      transformers \
+      accelerate
 
 # Copy scripts
 COPY start.sh organise_downloads.sh /usr/local/bin/

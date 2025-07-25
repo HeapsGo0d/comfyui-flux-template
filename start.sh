@@ -93,6 +93,7 @@ exit_clean() {
     
     echo "🔒 MAXIMUM security cleanup complete - all traces eliminated"
     echo "✅ Container state: CLEAN - no sensitive data remains"
+    echo "🧼 [exit_clean] Finished secure cleanup at $(date)"
 }
 
 # Enhanced trap to catch more signals
@@ -101,7 +102,12 @@ trap exit_clean SIGINT SIGTERM SIGQUIT SIGKILL EXIT
 # ─── 3️⃣ FileBrowser (Optional) ─────────────────────────────────────────────
 if [ "${FILEBROWSER:-false}" = "true" ]; then
     FB_USERNAME="${FB_USERNAME:-admin}"
-    FB_PASSWORD="${FB_PASSWORD:-admin}"
+    FB_PASSWORD="${FB_PASSWORD:-changeme}"
+    
+    # Generate a secure random password if default is used
+    if [ "$FB_PASSWORD" = "changeme" ]; then
+        FB_PASSWORD=$(openssl rand -base64 12)
+    fi
     
     echo "🗂️  Starting FileBrowser on port 8080..."
     filebrowser \
@@ -116,34 +122,54 @@ if [ "${FILEBROWSER:-false}" = "true" ]; then
 fi
 
 # ─── 4️⃣ CivitAI Downloads ──────────────────────────────────────────────────
-if [ -n "${CIVITAI_TOKEN:-}" ]; then
+if [ -n "${CIVITAI_TOKEN:-}" ] && [ "${CIVITAI_TOKEN}" != "*update*" ]; then
     echo "🔽 Downloading models from CivitAI..."
     cd /CivitAI_Downloader
     
-    # Build download command
+    # Check if we have any valid IDs to download
     DOWNLOAD_CMD="python3 download_with_aria.py --token ${CIVITAI_TOKEN} --output-dir ${DOWNLOAD_DIR}"
+    HAS_DOWNLOADS=false
     
-    [ -n "${CHECKPOINT_IDS_TO_DOWNLOAD:-}" ] && DOWNLOAD_CMD+=" --checkpoint-ids ${CHECKPOINT_IDS_TO_DOWNLOAD}"
-    [ -n "${LORA_IDS_TO_DOWNLOAD:-}" ] && DOWNLOAD_CMD+=" --lora-ids ${LORA_IDS_TO_DOWNLOAD}"
-    [ -n "${VAE_IDS_TO_DOWNLOAD:-}" ] && DOWNLOAD_CMD+=" --vae-ids ${VAE_IDS_TO_DOWNLOAD}"
+    if [ -n "${CHECKPOINT_IDS_TO_DOWNLOAD:-}" ] && [ "${CHECKPOINT_IDS_TO_DOWNLOAD}" != "*update*" ]; then
+        DOWNLOAD_CMD+=" --checkpoint-ids ${CHECKPOINT_IDS_TO_DOWNLOAD}"
+        HAS_DOWNLOADS=true
+    fi
     
-    echo "🎯 Running: ${DOWNLOAD_CMD}"
-    eval ${DOWNLOAD_CMD} || echo "⚠️  CivitAI download failed, continuing..."
+    if [ -n "${LORA_IDS_TO_DOWNLOAD:-}" ] && [ "${LORA_IDS_TO_DOWNLOAD}" != "*update*" ]; then
+        DOWNLOAD_CMD+=" --lora-ids ${LORA_IDS_TO_DOWNLOAD}"
+        HAS_DOWNLOADS=true
+    fi
+    
+    if [ -n "${VAE_IDS_TO_DOWNLOAD:-}" ] && [ "${VAE_IDS_TO_DOWNLOAD}" != "*update*" ]; then
+        DOWNLOAD_CMD+=" --vae-ids ${VAE_IDS_TO_DOWNLOAD}"
+        HAS_DOWNLOADS=true
+    fi
+    
+    if [ "$HAS_DOWNLOADS" = "true" ]; then
+        echo "🎯 Running: ${DOWNLOAD_CMD}"
+        eval ${DOWNLOAD_CMD} || echo "⚠️  CivitAI download failed, continuing..."
+    else
+        echo "⚠️  No valid CivitAI model IDs specified, skipping..."
+    fi
     
     cd - > /dev/null
     organise_downloads.sh "${DOWNLOAD_DIR}"
+else
+    echo "⚠️  CivitAI download failed, continuing..."
 fi
 
 # ─── 5️⃣ Hugging Face Downloads ─────────────────────────────────────────────
-if [ -n "${HUGGINGFACE_TOKEN:-}" ]; then
-    echo "🤗 Downloading models from Hugging Face..."
-    
-    python3 - <<EOF
+echo "🤗 Downloading models from Hugging Face..."
+
+python3 - <<EOF
 import os
 import sys
 from huggingface_hub import snapshot_download
 
-os.environ["HF_TOKEN"] = "${HUGGINGFACE_TOKEN}"
+# Set token if available
+if "${HUGGINGFACE_TOKEN:-}" and "${HUGGINGFACE_TOKEN}" != "*tokenOrLeaveBlank*":
+    os.environ["HF_TOKEN"] = "${HUGGINGFACE_TOKEN}"
+
 repos = os.getenv("HUGGINGFACE_REPOS", "black-forest-labs/FLUX.1-dev").strip()
 
 if repos:
@@ -155,7 +181,7 @@ if repos:
                 snapshot_download(
                     repo_id=repo,
                     cache_dir="${DOWNLOAD_DIR}",
-                    token=os.environ["HF_TOKEN"],
+                    token=os.environ.get("HF_TOKEN"),
                     resume_download=True
                 )
                 print(f"✅ Downloaded {repo}")
@@ -163,25 +189,69 @@ if repos:
                 print(f"❌ Failed to download {repo}: {e}")
                 continue
 EOF
+
+organise_downloads.sh "${DOWNLOAD_DIR}"
+
+# ─── 6️⃣ JupyterLab (Optional - only if installed) ──────────────────────────
+if command -v jupyter >/dev/null 2>&1; then
+    echo "🔬 Starting JupyterLab on port 8888..."
+    JUPYTER_TOKEN="${JUPYTER_TOKEN:-}"
     
-    organise_downloads.sh "${DOWNLOAD_DIR}"
+    if [ -z "$JUPYTER_TOKEN" ] || [ "$JUPYTER_TOKEN" = "*tokenOrLeaveBlank*" ]; then
+        # No token for RunPod security
+        jupyter lab \
+            --ip=0.0.0.0 \
+            --port=8888 \
+            --no-browser \
+            --allow-root \
+            --NotebookApp.token='' \
+            --NotebookApp.password='' \
+            --NotebookApp.allow_origin='*' \
+            --NotebookApp.allow_remote_access=True &
+        echo "🔬 JupyterLab: http://0.0.0.0:8888 (no token required)"
+    else
+        jupyter lab \
+            --ip=0.0.0.0 \
+            --port=8888 \
+            --no-browser \
+            --allow-root \
+            --NotebookApp.token="$JUPYTER_TOKEN" \
+            --NotebookApp.allow_origin='*' \
+            --NotebookApp.allow_remote_access=True &
+        echo "🔬 JupyterLab: http://0.0.0.0:8888 (token: $JUPYTER_TOKEN)"
+    fi
+else
+    echo "⚠️  JupyterLab not installed, skipping..."
 fi
 
-# ─── 6️⃣ JupyterLab (Auto-start, no token for RunPod security) ──────────────
-echo "🔬 Starting JupyterLab on port 8888..."
-jupyter lab \
-    --ip=0.0.0.0 \
-    --port=8888 \
-    --no-browser \
-    --allow-root \
-    --NotebookApp.token='' \
-    --NotebookApp.password='' \
-    --NotebookApp.allow_origin='*' \
-    --NotebookApp.allow_remote_access=True &
+# ─── 7️⃣ Verify Python Dependencies ────────────────────────────────────────
+echo "🔍 Verifying Python dependencies..."
+python3 - <<EOF
+import sys
+try:
+    from PIL import Image
+    print("✅ PIL/Pillow is available")
+except ImportError as e:
+    print(f"❌ PIL/Pillow missing: {e}")
+    print("🔧 Installing Pillow...")
+    import subprocess
+    subprocess.run([sys.executable, "-m", "pip", "install", "pillow"], check=True)
+    print("✅ Pillow installed successfully")
 
-echo "🔬 JupyterLab: http://0.0.0.0:8888 (no token required)"
+try:
+    import torch
+    print(f"✅ PyTorch {torch.__version__} is available")
+except ImportError as e:
+    print(f"❌ PyTorch missing: {e}")
 
-# ─── 7️⃣ Auto-detect ComfyUI Entrypoint ────────────────────────────────────
+try:
+    import transformers
+    print(f"✅ Transformers is available")
+except ImportError as e:
+    print(f"❌ Transformers missing: {e}")
+EOF
+
+# ─── 8️⃣ Auto-detect ComfyUI Entrypoint ────────────────────────────────────
 cd /ComfyUI
 
 echo "🎨 Starting ComfyUI..."
