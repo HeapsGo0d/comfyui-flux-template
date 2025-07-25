@@ -28,7 +28,7 @@ RUN pip3 install --no-cache-dir --upgrade pip setuptools wheel && \
       "huggingface_hub>=0.20" \
       comfyui-manager \
       requests pillow numpy aria2 transformers accelerate \
-      einops # CHANGED: Explicitly added einops to fix the crash
+      einops
 
 # Install FileBrowser
 RUN curl -fsSL \
@@ -72,15 +72,6 @@ COPY --from=builder /usr/local/bin/pip*            /usr/local/bin/
 COPY --from=builder /ComfyUI                       /ComfyUI
 COPY --from=builder /CivitAI_Downloader             /CivitAI_Downloader
 
-# CHANGED: This entire block was removed as it is redundant.
-# All packages are now copied from the builder stage.
-# RUN pip3 install --no-cache-dir \
-#       pillow \
-#       huggingface_hub>=0.20 \
-#       requests \
-#       transformers \
-#       accelerate
-
 # Copy scripts
 COPY start.sh organise_downloads.sh /usr/local/bin/
 RUN chmod +x /usr/local/bin/start.sh /usr/local/bin/organise_downloads.sh
@@ -108,6 +99,10 @@ RUN echo 'HISTSIZE=0'          >> /home/sduser/.bashrc && \
     chmod 700 /home/sduser/.config /home/sduser/.local /home/sduser/.local/share && \
     chmod 600 /home/sduser/.bashrc && \
     touch /home/sduser/.hushlogin
+
+# CHANGED: Added this block to fix the permission error
+# This ensures sduser owns all files in its home directory before we switch to it.
+RUN chown -R sduser:sduser /home/sduser
 
 # Switch to non-root user
 USER sduser
