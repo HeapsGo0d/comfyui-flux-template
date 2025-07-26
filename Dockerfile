@@ -1,5 +1,6 @@
 # ─── Single-Stage Build with Robust Dependencies ───────────────────────────
-FROM nvidia/cuda:12.4-devel-ubuntu22.04
+# Use a modern, but highly stable, base image for maximum compatibility
+FROM nvidia/cuda:12.4.1-cudnn-devel-ubuntu22.04
 
 ENV DEBIAN_FRONTEND=noninteractive \
     TORCH_CUDA_ARCH_LIST="8.9;9.0" \
