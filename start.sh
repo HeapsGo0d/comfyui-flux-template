@@ -15,6 +15,9 @@ fi
 DOWNLOAD_DIR="${BASEDIR}/downloads"
 mkdir -p "${DOWNLOAD_DIR}"
 
+# Create ComfyUI model directories
+mkdir -p /ComfyUI/models/{checkpoints,loras,vae,clip,unet,controlnet,embeddings}
+
 # ─── 2️⃣ MAXIMUM Security/Privacy Cleanup - Leave No Trace ─────────────────
 exit_clean() {
     echo "🔒 Starting comprehensive no-trace cleanup..."
@@ -110,8 +113,9 @@ if [ "${FILEBROWSER:-false}" = "true" ]; then
     fi
     
     echo "🗂️  Starting FileBrowser on port 8080..."
+    # FIX: Change root from ${BASEDIR} to /workspace so users can navigate everywhere
     filebrowser \
-        --root "${BASEDIR}" \
+        --root /workspace \
         --port 8080 \
         --address 0.0.0.0 \
         --username "${FB_USERNAME}" \
@@ -153,7 +157,6 @@ if [ -n "${CIVITAI_TOKEN:-}" ] && [ "${CIVITAI_TOKEN}" != "*update*" ]; then
     fi
     
     cd - > /dev/null
-    organise_downloads.sh "${DOWNLOAD_DIR}"
 else
     echo "⚠️  No CivitAI token provided, skipping CivitAI downloads..."
 fi
@@ -194,7 +197,57 @@ if repos:
                 continue
 EOF
 
+# ─── 5.5️⃣ CRITICAL FIX: Organize Downloaded Models ────────────────────────
+echo "🔧 Organizing downloaded models..."
 organise_downloads.sh "${DOWNLOAD_DIR}"
+
+# FIX: Also create symlinks from HuggingFace cache to ComfyUI models
+echo "🔗 Creating symlinks for HuggingFace models..."
+if [ -d "${DOWNLOAD_DIR}" ]; then
+    # Find HuggingFace cache directories and symlink models
+    find "${DOWNLOAD_DIR}" -name "*.safetensors" -o -name "*.ckpt" -o -name "*.pt" -o -name "*.pth" | while read -r model_file; do
+        if [ -f "$model_file" ]; then
+            filename=$(basename "$model_file")
+            filename_lower=$(echo "$filename" | tr '[:upper:]' '[:lower:]')
+            
+            # Determine target directory
+            if [[ "$filename_lower" == *"flux"* ]] || [[ "$filename_lower" == *"unet"* ]]; then
+                target_dir="/ComfyUI/models/unet"
+            elif [[ "$filename_lower" == *"vae"* ]]; then
+                target_dir="/ComfyUI/models/vae"
+            elif [[ "$filename_lower" == *"clip"* ]]; then
+                target_dir="/ComfyUI/models/clip"
+            elif [[ "$filename_lower" == *"lora"* ]]; then
+                target_dir="/ComfyUI/models/loras"
+            else
+                target_dir="/ComfyUI/models/checkpoints"
+            fi
+            
+            # Create symlink if target doesn't exist
+            target_file="${target_dir}/${filename}"
+            if [ ! -f "$target_file" ] && [ ! -L "$target_file" ]; then
+                mkdir -p "$target_dir"
+                echo "🔗 Symlinking: $filename → $target_dir/"
+                ln -sf "$model_file" "$target_file" 2>/dev/null || cp "$model_file" "$target_file"
+            fi
+        fi
+    done
+fi
+
+# Show final model summary
+echo ""
+echo "📊 Final Model Summary:"
+for model_dir in /ComfyUI/models/*/; do
+    if [ -d "$model_dir" ]; then
+        count=$(find "$model_dir" -maxdepth 1 -type f \( -name "*.safetensors" -o -name "*.ckpt" -o -name "*.pt" -o -name "*.pth" \) 2>/dev/null | wc -l)
+        symlink_count=$(find "$model_dir" -maxdepth 1 -type l 2>/dev/null | wc -l)
+        if [ "$count" -gt 0 ] || [ "$symlink_count" -gt 0 ]; then
+            dir_name=$(basename "$model_dir")
+            total_files=$((count + symlink_count))
+            echo "  ${dir_name}: ${total_files} files (${count} files + ${symlink_count} symlinks)"
+        fi
+    fi
+done
 
 # ─── 6️⃣ JupyterLab (Optional - only if installed) ──────────────────────────
 if command -v jupyter >/dev/null 2>&1; then
@@ -202,16 +255,17 @@ if command -v jupyter >/dev/null 2>&1; then
     JUPYTER_TOKEN="${JUPYTER_TOKEN:-}"
     
     if [ -z "$JUPYTER_TOKEN" ] || [ "$JUPYTER_TOKEN" = "*tokenOrLeaveBlank*" ]; then
-        # No token for RunPod security
+        # No token for RunPod security - FIX: Updated arguments for newer Jupyter
         jupyter lab \
             --ip=0.0.0.0 \
             --port=8888 \
             --no-browser \
             --allow-root \
-            --NotebookApp.token='' \
-            --NotebookApp.password='' \
-            --NotebookApp.allow_origin='*' \
-            --NotebookApp.allow_remote_access=True &
+            --ServerApp.token='' \
+            --ServerApp.password='' \
+            --ServerApp.allow_origin='*' \
+            --ServerApp.allow_remote_access=True \
+            --ServerApp.disable_check_xsrf=True &
         echo "🔬 JupyterLab: http://0.0.0.0:8888 (no token required)"
     else
         jupyter lab \
@@ -219,9 +273,10 @@ if command -v jupyter >/dev/null 2>&1; then
             --port=8888 \
             --no-browser \
             --allow-root \
-            --NotebookApp.token="$JUPYTER_TOKEN" \
-            --NotebookApp.allow_origin='*' \
-            --NotebookApp.allow_remote_access=True &
+            --ServerApp.token="$JUPYTER_TOKEN" \
+            --ServerApp.allow_origin='*' \
+            --ServerApp.allow_remote_access=True \
+            --ServerApp.disable_check_xsrf=True &
         echo "🔬 JupyterLab: http://0.0.0.0:8888 (token: $JUPYTER_TOKEN)"
     fi
 else
@@ -243,6 +298,11 @@ def check_and_install(package_name, import_name=None, install_cmd=None):
         if import_name == 'torch':
             import torch
             print(f"✅ PyTorch {torch.__version__} is available")
+            if torch.cuda.is_available():
+                print(f"✅ CUDA {torch.version.cuda} detected")
+                print(f"✅ GPU: {torch.cuda.get_device_name(0)}")
+            else:
+                print("⚠️  CUDA not available")
         elif import_name == 'PIL':
             print("✅ PIL/Pillow is available")
         else:
@@ -258,8 +318,8 @@ def check_and_install(package_name, import_name=None, install_cmd=None):
                     # Install PyTorch with CUDA support
                     subprocess.run([
                         sys.executable, "-m", "pip", "install", "--user",
-                        "torch==2.3.1+cu121", "torchvision==0.18.1+cu121", "torchaudio==2.3.1+cu121",
-                        "--index-url", "https://download.pytorch.org/whl/cu121"
+                        "torch==2.4.1+cu124", "torchvision==0.19.1+cu124", "torchaudio==2.4.1+cu124",
+                        "--index-url", "https://download.pytorch.org/whl/cu124"
                     ], check=True)
                 else:
                     subprocess.run([sys.executable, "-m", "pip", "install", "--user", install_cmd], check=True)

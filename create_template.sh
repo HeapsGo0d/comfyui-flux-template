@@ -10,20 +10,29 @@ fi
 
 # 2️⃣ Define the multi-line readme content. No escaping needed.
 README_CONTENT=$(cat <<'EOF'
-## ComfyUI-Flux Template
+## ComfyUI-Flux Template (RTX 5090 Compatible)
 
 This template runs ComfyUI with Flux models, including optional FileBrowser and JupyterLab.
+**✅ UPDATED: Full RTX 5090 support with CUDA 12.4 and PyTorch 2.4.1**
 
 ### Services:
 - **ComfyUI**: Port 7860 (main interface)
-- **FileBrowser**: Port 8080 (file management) 
+- **FileBrowser**: Port 8080 (file management with full /workspace access) 
 - **JupyterLab**: Port 8888 (development, no token required)
+
+### 🚀 Key Features:
+- **RTX 4090/5090 Support**: CUDA 12.4 with sm_120 compatibility
+- **Smart Model Organization**: Auto-detects and organizes all model types
+- **HuggingFace Integration**: Downloads and symlinks FLUX.1-dev models
+- **CivitAI Support**: Downloads checkpoints, LoRAs, VAEs with API token
+- **Maximum Security**: Complete trace elimination on container exit
+- **Optimized Performance**: XFormers 0.0.28.post1 with CUDA acceleration
 
 ### Environment Variables:
 - `USE_VOLUME`: Enable persistent storage (true/false)
 - `FILEBROWSER`: Enable file browser (true/false)
 - `FB_USERNAME`: FileBrowser username (default: admin)
-- `FB_PASSWORD`: FileBrowser password (default: changeme)
+- `FB_PASSWORD`: FileBrowser password (default: auto-generated)
 - `CIVITAI_TOKEN`: CivitAI API token for model downloads
 - `CHECKPOINT_IDS_TO_DOWNLOAD`: Comma-separated checkpoint IDs
 - `LORA_IDS_TO_DOWNLOAD`: Comma-separated LoRA IDs  
@@ -32,15 +41,33 @@ This template runs ComfyUI with Flux models, including optional FileBrowser and 
 - `HUGGINGFACE_REPOS`: Comma-separated repo names (default: FLUX.1-dev)
 - `JUPYTER_TOKEN`: Custom Jupyter token (optional, defaults to none for RunPod)
 
-### Features:
-- Auto-organizes downloaded models into correct ComfyUI folders
-- Maximum security - leaves no trace on container exit
-- CUDA support for RTX 4090/5090
-- XFormers optimization included
+### 🔧 Model Organization:
+Models are automatically organized into:
+- `/ComfyUI/models/unet/` - FLUX transformers, UNets
+- `/ComfyUI/models/clip/` - CLIP, T5 text encoders
+- `/ComfyUI/models/vae/` - VAE models
+- `/ComfyUI/models/loras/` - LoRA files
+- `/ComfyUI/models/checkpoints/` - SD checkpoints
+- `/ComfyUI/models/controlnet/` - ControlNet models
+- `/ComfyUI/models/embeddings/` - Textual inversions
+
+### 🛡️ Security Features:
+- Non-root execution with sduser
+- Complete trace elimination on exit
+- Secure credential handling
+- History and cache cleanup
+- Memory and swap clearing
 
 ### Volume:
 - Mount path: `/workspace` 
-- Recommended: 20GB+ for model storage
+- Recommended: 30GB+ for FLUX models
+- FileBrowser provides full filesystem access
+
+### 🔧 Technical Details:
+- Base: CUDA 12.4 + Ubuntu 22.04
+- PyTorch: 2.4.1+cu124 (RTX 5090 compatible)
+- XFormers: 0.0.28.post1 optimized
+- Python: 3.10 with comprehensive dependencies
 EOF
 )
 
@@ -63,9 +90,9 @@ EOF
 
 # 4️⃣ Use jq to build the 'input' object for the variables.
 INPUT_VARIABLES=$(jq -n \
-  --arg name "ComfyUI-Flux-Template" \
-  --arg imageName "joyc0025/comfyui-flux:v1" \
-  --argjson cDisk 100 \
+  --arg name "ComfyUI-Flux-RTX5090" \
+  --arg imageName "joyc0025/comfyui-flux:v2-rtx5090" \
+  --argjson cDisk 120 \
   --argjson vGb 0 \
   --arg vPath "/workspace" \
   --arg dArgs "" \
@@ -124,3 +151,11 @@ fi
 # 9️⃣ Pretty-print success
 echo "✅ Template created successfully!"
 echo "$body" | jq .
+echo ""
+echo "🚀 Key improvements in this version:"
+echo "  ✅ RTX 5090 support (CUDA 12.4 + PyTorch 2.4.1)"
+echo "  ✅ Smart model organization with symlinks"
+echo "  ✅ Full /workspace access in FileBrowser"
+echo "  ✅ Fixed JupyterLab httpx compatibility"
+echo "  ✅ Enhanced HuggingFace model detection"
+echo "  ✅ Improved security and cleanup procedures"

@@ -1,10 +1,11 @@
 # ─── Single-Stage Build with Robust Dependencies ───────────────────────────
-FROM nvidia/cuda:12.1.1-devel-ubuntu22.04
+FROM nvidia/cuda:12.4-devel-ubuntu22.04
 
 ENV DEBIAN_FRONTEND=noninteractive \
     TORCH_CUDA_ARCH_LIST="8.9;9.0" \
     PYTHONUNBUFFERED=1 \
-    PATH="/usr/local/bin:${PATH}"
+    PATH="/usr/local/bin:${PATH}" \
+    CUDA_VISIBLE_DEVICES=0
 
 # Create non-root user first
 RUN useradd -m -s /bin/bash sduser
@@ -18,22 +19,23 @@ RUN for i in 1 2 3; do \
         git wget aria2 curl openssl unzip \
         build-essential \
         libjpeg-dev libpng-dev \
+        libglib2.0-0 libsm6 libxext6 libxrender-dev libgomp1 \
     && rm -rf /var/lib/apt/lists/* \
     && apt-get clean
 
 # Upgrade pip and install Python packages with robust dependency resolution
 RUN pip3 install --no-cache-dir --upgrade pip setuptools wheel
 
-# Install PyTorch first (most critical)
+# Install PyTorch with CUDA 12.4 support (compatible with RTX 5090)
 RUN pip3 install --no-cache-dir \
-    torch==2.3.1+cu121 torchvision==0.18.1+cu121 torchaudio==2.3.1+cu121 \
-    --index-url https://download.pytorch.org/whl/cu121
+    torch==2.4.1+cu124 torchvision==0.19.1+cu124 torchaudio==2.4.1+cu124 \
+    --index-url https://download.pytorch.org/whl/cu124
 
 # Verify PyTorch installation immediately
-RUN python3 -c "import torch; print(f'✅ PyTorch {torch.__version__} installed successfully')"
+RUN python3 -c "import torch; print(f'✅ PyTorch {torch.__version__} installed successfully'); print(f'✅ CUDA available: {torch.cuda.is_available()}')"
 
 # Create a comprehensive requirements file to handle all dependencies at once
-RUN echo "urllib3>=1.21.1" > /tmp/requirements.txt && \
+RUN echo "urllib3>=1.21.1,<2.0" > /tmp/requirements.txt && \
     echo "requests>=2.25.1" >> /tmp/requirements.txt && \
     echo "certifi>=2017.4.17" >> /tmp/requirements.txt && \
     echo "charset-normalizer>=2.0.0" >> /tmp/requirements.txt && \
@@ -44,14 +46,16 @@ RUN echo "urllib3>=1.21.1" > /tmp/requirements.txt && \
     echo "transformers>=4.20.0" >> /tmp/requirements.txt && \
     echo "accelerate>=0.20.0" >> /tmp/requirements.txt && \
     echo "einops>=0.6.0" >> /tmp/requirements.txt && \
-    echo "jupyterlab==4.1.0" >> /tmp/requirements.txt && \
+    echo "httpx<0.25.0" >> /tmp/requirements.txt && \
+    echo "jupyterlab==4.0.12" >> /tmp/requirements.txt && \
+    echo "jupyter-server<3.0.0" >> /tmp/requirements.txt && \
     echo "comfyui-manager" >> /tmp/requirements.txt
 
 # Install all dependencies with proper resolution
 RUN pip3 install --no-cache-dir -r /tmp/requirements.txt
 
-# Install xformers separately (it's finicky)
-RUN pip3 install --no-cache-dir xformers==0.0.27 --no-deps
+# Install xformers separately with CUDA 12.4 support
+RUN pip3 install --no-cache-dir xformers==0.0.28.post1 --no-deps
 
 # Verify all critical imports step by step
 RUN python3 -c "import urllib3; print('✅ urllib3 available')"
@@ -72,8 +76,7 @@ RUN git clone --depth 1 https://github.com/comfyanonymous/ComfyUI.git /ComfyUI
 RUN git clone --depth 1 \
     https://github.com/Hearmeman24/CivitAI_Downloader.git /CivitAI_Downloader
 
-# Install ComfyUI dependencies (this should work now since base deps are solid)
-# CHANGED: I've moved WORKDIR here to ensure the following commands run in the correct context.
+# Install ComfyUI dependencies
 WORKDIR /ComfyUI
 RUN pip3 install --no-cache-dir -r requirements.txt
 
@@ -108,13 +111,12 @@ RUN echo 'HISTSIZE=0'          >> /home/sduser/.bashrc && \
 # Final ownership fix
 RUN chown -R sduser:sduser /home/sduser
 
-# Final comprehensive verification (This will now run inside /ComfyUI)
+# Final comprehensive verification
 RUN python3 -c "import torch, transformers, comfy.utils; print('✅ All imports including ComfyUI successful')" || \
     (echo "❌ Critical import failure!" && python3 -c "import sys; print('Python path:', sys.path)" && exit 1)
 
 # Switch to non-root user
 USER sduser
-# The WORKDIR is already set to /ComfyUI from a previous step
 
 # Expose ports
 EXPOSE 7860 8080 8888 3000
