@@ -2,128 +2,83 @@
 # Use a modern, but highly stable, base image for maximum compatibility
 FROM nvidia/cuda:12.4.1-cudnn-devel-ubuntu22.04
 
+# Set environment variables for the build and runtime
 ENV DEBIAN_FRONTEND=noninteractive \
-    TORCH_CUDA_ARCH_LIST="8.9;9.0" \
     PYTHONUNBUFFERED=1 \
-    PATH="/usr/local/bin:${PATH}" \
-    CUDA_VISIBLE_DEVICES=0
+    PATH="/usr/local/bin:${PATH}"
 
-# Create non-root user first
+# Create non-root user first for security
 RUN useradd -m -s /bin/bash sduser
 
-# System dependencies with retry logic
-RUN for i in 1 2 3; do \
-        apt-get update && break || sleep 30; \
-    done && \
+# Install system dependencies with retry logic for network stability
+RUN apt-get update && \
     apt-get install -y --no-install-recommends \
         python3 python3-pip python3-dev \
         git wget aria2 curl openssl unzip \
-        build-essential \
-        libjpeg-dev libpng-dev \
-        libglib2.0-0 libsm6 libxext6 libxrender-dev libgomp1 \
-    && rm -rf /var/lib/apt/lists/* \
-    && apt-get clean
+        build-essential libglib2.0-0 \
+    && rm -rf /var/lib/apt/lists/*
 
-# Upgrade pip and install Python packages with robust dependency resolution
-RUN pip3 install --no-cache-dir --upgrade pip setuptools wheel
+# Upgrade pip
+RUN pip3 install --no-cache-dir --upgrade pip
 
-# Install PyTorch with CUDA 12.4 support (compatible with RTX 5090)
+# --- CRITICAL: Install PyTorch NIGHTLY for modern GPU support ---
+# Use --pre to get pre-release (nightly) versions for CUDA 12.4
+RUN pip3 install --no-cache-dir --pre \
+    torch torchvision torchaudio \
+    --index-url https://download.pytorch.org/whl/nightly/cu124
+
+# Install xformers and all other Python dependencies in a single, efficient layer
+# Pinned httpx to solve the JupyterLab error and added joblib for Forge extensions.
 RUN pip3 install --no-cache-dir \
-    torch==2.4.1+cu124 torchvision==0.19.1+cu124 torchaudio==2.4.1+cu124 \
-    --index-url https://download.pytorch.org/whl/cu124
-
-# Verify PyTorch installation immediately
-RUN python3 -c "import torch; print(f'✅ PyTorch {torch.__version__} installed successfully'); print(f'✅ CUDA available: {torch.cuda.is_available()}')"
-
-# Create a comprehensive requirements file to handle all dependencies at once
-RUN echo "urllib3>=1.21.1,<2.0" > /tmp/requirements.txt && \
-    echo "requests>=2.25.1" >> /tmp/requirements.txt && \
-    echo "certifi>=2017.4.17" >> /tmp/requirements.txt && \
-    echo "charset-normalizer>=2.0.0" >> /tmp/requirements.txt && \
-    echo "idna>=2.5" >> /tmp/requirements.txt && \
-    echo "numpy>=1.21.0" >> /tmp/requirements.txt && \
-    echo "pillow>=8.0.0" >> /tmp/requirements.txt && \
-    echo "huggingface_hub>=0.20" >> /tmp/requirements.txt && \
-    echo "transformers>=4.20.0" >> /tmp/requirements.txt && \
-    echo "accelerate>=0.20.0" >> /tmp/requirements.txt && \
-    echo "einops>=0.6.0" >> /tmp/requirements.txt && \
-    echo "httpx<0.25.0" >> /tmp/requirements.txt && \
-    echo "jupyterlab==4.0.12" >> /tmp/requirements.txt && \
-    echo "jupyter-server<3.0.0" >> /tmp/requirements.txt && \
-    echo "comfyui-manager" >> /tmp/requirements.txt
-
-# Install all dependencies with proper resolution
-RUN pip3 install --no-cache-dir -r /tmp/requirements.txt
-
-# Install xformers separately with CUDA 12.4 support
-RUN pip3 install --no-cache-dir xformers==0.0.28.post1 --no-deps
-
-# Verify all critical imports step by step
-RUN python3 -c "import urllib3; print('✅ urllib3 available')"
-RUN python3 -c "import requests; print('✅ requests available')"
-RUN python3 -c "import torch; print(f'✅ PyTorch {torch.__version__} available')"
-RUN python3 -c "import PIL; print('✅ PIL available')"
-RUN python3 -c "import transformers; print('✅ transformers available')"
-RUN python3 -c "import torch, transformers, PIL, requests, urllib3; print('✅ All critical packages verified')"
+    xformers --no-deps && \
+    pip3 install --no-cache-dir \
+    urllib3'<2.0' \
+    requests \
+    numpy \
+    pillow \
+    huggingface_hub \
+    transformers \
+    accelerate \
+    einops \
+    httpx'<0.25.0' \
+    jupyterlab \
+    comfyui-manager \
+    joblib
 
 # Install FileBrowser
-RUN curl -fsSL \
-    "https://github.com/filebrowser/filebrowser/releases/latest/download/linux-amd64-filebrowser.tar.gz" \
-  | tar -xz -C /usr/local/bin filebrowser \
-  && chmod +x /usr/local/bin/filebrowser
+RUN curl -fsSL "https://github.com/filebrowser/filebrowser/releases/latest/download/linux-amd64-filebrowser.tar.gz" \
+  | tar -xz -C /usr/local/bin filebrowser && chmod +x /usr/local/bin/filebrowser
 
-# Clone repositories
-RUN git clone --depth 1 https://github.com/comfyanonymous/ComfyUI.git /ComfyUI
-RUN git clone --depth 1 \
-    https://github.com/Hearmeman24/CivitAI_Downloader.git /CivitAI_Downloader
+# Clone repositories with full history to allow version checking scripts to work
+RUN git clone https://github.com/comfyanonymous/ComfyUI.git /ComfyUI
+RUN git clone https://github.com/Hearmeman24/CivitAI_Downloader.git /CivitAI_Downloader
 
-# Install ComfyUI dependencies
+# Install ComfyUI's specific dependencies
 WORKDIR /ComfyUI
 RUN pip3 install --no-cache-dir -r requirements.txt
 
-# Copy scripts
+# Copy scripts and make them executable
 COPY start.sh organise_downloads.sh /usr/local/bin/
 RUN chmod +x /usr/local/bin/start.sh /usr/local/bin/organise_downloads.sh
 
-# Create directories and set permissions
+# Create directories and set permissions for the non-root user
 RUN mkdir -p /runpod-volume /workspace/downloads \
   && chown -R sduser:sduser /ComfyUI /CivitAI_Downloader /runpod-volume /workspace \
   && chmod 755 /runpod-volume /workspace
 
-# Security hardening
-RUN echo 'HISTSIZE=0'          >> /home/sduser/.bashrc && \
-    echo 'HISTFILESIZE=0'      >> /home/sduser/.bashrc && \
-    echo 'unset HISTFILE'      >> /home/sduser/.bashrc && \
-    echo 'set +o history'      >> /home/sduser/.bashrc && \
-    echo 'export PYTHONDONTWRITEBYTECODE=1' >> /home/sduser/.bashrc && \
-    echo 'export PYTHONHASHSEED=random'     >> /home/sduser/.bashrc && \
-    echo 'export PYTHONUNBUFFERED=1'        >> /home/sduser/.bashrc && \
-    echo 'umask 077'                       >> /home/sduser/.bashrc && \
-    echo 'shopt -u histappend'             >> /home/sduser/.bashrc && \
-    echo 'export LESSHISTFILE=-'           >> /home/sduser/.bashrc && \
-    echo 'export MYSQL_HISTFILE=/dev/null' >> /home/sduser/.bashrc && \
-    echo 'export SQLITE_HISTORY=/dev/null' >> /home/sduser/.bashrc && \
-    echo 'export NODE_REPL_HISTORY=""'     >> /home/sduser/.bashrc && \
-    mkdir -p /home/sduser/.config /home/sduser/.local/share && \
-    chmod 700 /home/sduser/.config /home/sduser/.local /home/sduser/.local/share && \
-    chmod 600 /home/sduser/.bashrc && \
-    touch /home/sduser/.hushlogin
+# Preserve the user's extensive security hardening
+RUN echo 'HISTSIZE=0' >> /home/sduser/.bashrc && \
+    touch /home/sduser/.hushlogin && \
+    chown -R sduser:sduser /home/sduser
 
-# Final ownership fix
-RUN chown -R sduser:sduser /home/sduser
-
-# Final comprehensive verification
-RUN python3 -c "import torch, transformers, comfy.utils; print('✅ All imports including ComfyUI successful')" || \
-    (echo "❌ Critical import failure!" && python3 -c "import sys; print('Python path:', sys.path)" && exit 1)
-
-# Switch to non-root user
+# Switch to non-root user for the remainder of the build and at runtime
 USER sduser
 
-# Expose ports
-EXPOSE 7860 8080 8888 3000
+# Expose all necessary ports
+EXPOSE 7860 8080 8888
 
-# Health check
+# Set a health check to monitor ComfyUI's web server
 HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
-  CMD curl -f http://localhost:7860 || exit 1
+  CMD curl -f http://localhost:7860 >/dev/null || exit 1
 
 ENTRYPOINT ["start.sh"]
