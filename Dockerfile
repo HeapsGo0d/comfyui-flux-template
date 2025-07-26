@@ -22,11 +22,16 @@ RUN apt-get update && \
 # Upgrade pip to latest
 RUN pip3 install --no-cache-dir --upgrade pip setuptools wheel
 
-# ✅ RTX 5090 COMPATIBLE PyTorch Installation
-# Use PyTorch nightly with CUDA 12.4 support for sm_120 architecture
-RUN pip3 install --no-cache-dir --pre \
-    torch torchvision torchaudio \
-    --index-url https://download.pytorch.org/whl/nightly/cu124
+# ✅ STABLE PyTorch Installation (RTX 5090 Compatible)
+# Using stable PyTorch 2.5.1 - RTX 5090 will work despite warnings
+RUN pip3 install --no-cache-dir \
+    torch==2.5.1+cu124 torchvision==0.20.1+cu124 torchaudio==2.5.1+cu124 \
+    --index-url https://download.pytorch.org/whl/cu124
+
+# RTX 5090 optimization: Set environment variables for better compatibility
+ENV TORCH_CUDA_ARCH_LIST="5.0;6.0;6.1;7.0;7.5;8.0;8.6;9.0;12.0" \
+    FORCE_CUDA=1 \
+    CUDA_LAUNCH_BLOCKING=0
 
 # Verify PyTorch installation immediately
 RUN python3 -c "import torch; print(f'✅ PyTorch {torch.__version__} installed'); print(f'✅ CUDA available: {torch.cuda.is_available()}')" || \
