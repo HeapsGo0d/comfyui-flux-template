@@ -22,9 +22,9 @@ RUN apt-get update && \
 RUN pip3 install --no-cache-dir --upgrade pip
 
 # --- CRITICAL: Install PyTorch NIGHTLY for modern GPU support ---
-# Use --pre to get pre-release (nightly) versions for CUDA 12.4
+# FIX: Removed torchaudio as it's not available in this nightly channel and not needed for ComfyUI.
 RUN pip3 install --no-cache-dir --pre \
-    torch torchvision torchaudio \
+    torch torchvision \
     --index-url https://download.pytorch.org/whl/nightly/cu124
 
 # Install xformers and all other Python dependencies in a single, efficient layer
