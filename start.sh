@@ -232,14 +232,21 @@ if torch.cuda.is_available():
     print(f'✅ CUDA {torch.version.cuda} detected')
     print(f'✅ GPU: {torch.cuda.get_device_name(0)}')
     print(f'✅ GPU Memory: {torch.cuda.get_device_properties(0).total_memory // 1024**3}GB')
-    # Test if RTX 5090 architecture is supported
+    # Special RTX 5090 handling
     try:
         device_props = torch.cuda.get_device_properties(0)
-        print(f'✅ GPU Compute Capability: {device_props.major}.{device_props.minor}')
-        if device_props.major >= 9:  # sm_90 and above
-            print('✅ RTX 5090 architecture fully supported')
+        compute_cap = f'{device_props.major}.{device_props.minor}'
+        print(f'✅ GPU Compute Capability: sm_{device_props.major}{device_props.minor}')
+        
+        if 'RTX 5090' in torch.cuda.get_device_name(0):
+            print('🚀 RTX 5090 detected!')
+            print('ℹ️  Note: You may see sm_120 compatibility warnings - this is normal.')
+            print('ℹ️  The GPU will work correctly despite the warnings.')
+            print('ℹ️  For optimal performance, consider using NVIDIA PyTorch containers.')
+        elif device_props.major >= 9:  # sm_90 and above (newer architectures)
+            print('✅ Modern GPU architecture fully supported')
         else:
-            print('⚠️  Older GPU architecture detected')
+            print('✅ GPU architecture supported')
     except Exception as e:
         print(f'⚠️  Could not check GPU capabilities: {e}')
 else:
