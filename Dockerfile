@@ -21,14 +21,14 @@ RUN apt-get update && \
 # Upgrade pip
 RUN pip3 install --no-cache-dir --upgrade pip
 
-# --- CRITICAL: Install PyTorch NIGHTLY for modern GPU support ---
-# FIX: Removed torchaudio as it's not available in this nightly channel and not needed for ComfyUI.
+# --- CRITICAL FIX: Install torchvision and let it pull its exact torch dependency ---
+# This avoids the nightly build conflict by installing the child package first.
 RUN pip3 install --no-cache-dir --pre \
-    torch torchvision \
+    torchvision \
     --index-url https://download.pytorch.org/whl/nightly/cu124
 
 # Install xformers and all other Python dependencies in a single, efficient layer
-# Pinned httpx to solve the JupyterLab error and added joblib for Forge extensions.
+# Pinned httpx to solve the JupyterLab error and added joblib for other extensions.
 RUN pip3 install --no-cache-dir \
     xformers --no-deps && \
     pip3 install --no-cache-dir \
