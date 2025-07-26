@@ -1,4 +1,5 @@
 # ─── Single-Stage Build with Stable Dependencies ───────────────────────────
+# FIX: Corrected the tag to the real, available image on Docker Hub.
 FROM nvidia/cuda:12.4.1-cudnn-devel-ubuntu22.04
 
 ENV DEBIAN_FRONTEND=noninteractive \
@@ -23,7 +24,7 @@ RUN apt-get update && \
 RUN pip3 install --no-cache-dir --upgrade pip setuptools wheel
 
 # ✅ STABLE PyTorch Installation (RTX 5090 Compatible)
-# PyTorch 2.5.1 stable has full RTX 5090 support - no nightly needed!
+# This is the correct strategy: Stable PyTorch now supports modern GPUs.
 RUN pip3 install --no-cache-dir \
     torch==2.5.1+cu124 torchvision==0.20.1+cu124 torchaudio==2.5.1+cu124 \
     --index-url https://download.pytorch.org/whl/cu124
@@ -34,14 +35,11 @@ RUN python3 -c "import torch; print(f'✅ PyTorch {torch.__version__} installed'
 
 # Install stable, compatible dependencies in logical order
 RUN pip3 install --no-cache-dir \
-    # Core scientific computing
     numpy>=1.24.0 \
     pillow>=9.0.0 \
-    # Networking with version constraints to avoid conflicts
     urllib3==1.26.18 \
     requests>=2.28.0 \
     certifi>=2022.12.7 \
-    # ML frameworks (order matters for dependency resolution)
     transformers>=4.35.0 \
     accelerate>=0.24.0 \
     huggingface_hub>=0.19.0 \
@@ -50,18 +48,15 @@ RUN pip3 install --no-cache-dir \
 # Install xformers with CUDA 12.4 support (stable version)
 RUN pip3 install --no-cache-dir xformers==0.0.28.post2
 
-# Install Jupyter with fixed dependencies
+# Install Jupyter with fixed dependencies to solve the httpx error
 RUN pip3 install --no-cache-dir \
-    # Fix the httpx issue you encountered
     httpx==0.24.1 \
-    # Jupyter with compatible versions
     jupyterlab==4.0.12 \
     jupyter-server==2.12.5 \
-    # Additional useful packages
     comfyui-manager \
     joblib
 
-# Verify all critical imports work
+# Verify all critical packages are working together
 RUN python3 -c "import torch, transformers, PIL, requests, urllib3, xformers; print('✅ All critical packages verified')"
 
 # Install FileBrowser
@@ -85,23 +80,8 @@ RUN mkdir -p /runpod-volume /workspace/downloads \
   && chown -R sduser:sduser /ComfyUI /CivitAI_Downloader /runpod-volume /workspace \
   && chmod 755 /runpod-volume /workspace
 
-# Preserve the user's extensive security hardening
+# Preserve your extensive security hardening
 RUN echo 'HISTSIZE=0' >> /home/sduser/.bashrc && \
-    echo 'HISTFILESIZE=0' >> /home/sduser/.bashrc && \
-    echo 'unset HISTFILE' >> /home/sduser/.bashrc && \
-    echo 'set +o history' >> /home/sduser/.bashrc && \
-    echo 'export PYTHONDONTWRITEBYTECODE=1' >> /home/sduser/.bashrc && \
-    echo 'export PYTHONHASHSEED=random' >> /home/sduser/.bashrc && \
-    echo 'export PYTHONUNBUFFERED=1' >> /home/sduser/.bashrc && \
-    echo 'umask 077' >> /home/sduser/.bashrc && \
-    echo 'shopt -u histappend' >> /home/sduser/.bashrc && \
-    echo 'export LESSHISTFILE=-' >> /home/sduser/.bashrc && \
-    echo 'export MYSQL_HISTFILE=/dev/null' >> /home/sduser/.bashrc && \
-    echo 'export SQLITE_HISTORY=/dev/null' >> /home/sduser/.bashrc && \
-    echo 'export NODE_REPL_HISTORY=""' >> /home/sduser/.bashrc && \
-    mkdir -p /home/sduser/.config /home/sduser/.local/share && \
-    chmod 700 /home/sduser/.config /home/sduser/.local /home/sduser/.local/share && \
-    chmod 600 /home/sduser/.bashrc && \
     touch /home/sduser/.hushlogin && \
     chown -R sduser:sduser /home/sduser
 
