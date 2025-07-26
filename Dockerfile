@@ -1,5 +1,4 @@
-# ─── Single-Stage Build with Stable Dependencies ───────────────────────────
-# FIX: Corrected the tag to the real, available image on Docker Hub.
+# ─── Single-Stage Build with RTX 5090 Support ───────────────────────────
 FROM nvidia/cuda:12.4.1-cudnn-devel-ubuntu22.04
 
 ENV DEBIAN_FRONTEND=noninteractive \
@@ -23,11 +22,11 @@ RUN apt-get update && \
 # Upgrade pip to latest
 RUN pip3 install --no-cache-dir --upgrade pip setuptools wheel
 
-# ✅ STABLE PyTorch Installation (RTX 5090 Compatible)
-# This is the correct strategy: Stable PyTorch now supports modern GPUs.
-RUN pip3 install --no-cache-dir \
-    torch==2.5.1+cu124 torchvision==0.20.1+cu124 torchaudio==2.5.1+cu124 \
-    --index-url https://download.pytorch.org/whl/cu124
+# ✅ RTX 5090 COMPATIBLE PyTorch Installation
+# Use PyTorch nightly with CUDA 12.4 support for sm_120 architecture
+RUN pip3 install --no-cache-dir --pre \
+    torch torchvision torchaudio \
+    --index-url https://download.pytorch.org/whl/nightly/cu124
 
 # Verify PyTorch installation immediately
 RUN python3 -c "import torch; print(f'✅ PyTorch {torch.__version__} installed'); print(f'✅ CUDA available: {torch.cuda.is_available()}')" || \
@@ -45,14 +44,16 @@ RUN pip3 install --no-cache-dir \
     huggingface_hub>=0.19.0 \
     einops>=0.7.0
 
-# Install xformers with CUDA 12.4 support (stable version)
-RUN pip3 install --no-cache-dir xformers==0.0.28.post2
+# Install latest xformers compatible with nightly PyTorch
+RUN pip3 install --no-cache-dir xformers --upgrade
 
-# Install Jupyter with fixed dependencies to solve the httpx error
+# Install Jupyter with FIXED dependencies for compatibility
 RUN pip3 install --no-cache-dir \
-    httpx==0.24.1 \
-    jupyterlab==4.0.12 \
-    jupyter-server==2.12.5 \
+    httpx==0.27.0 \
+    anyio==4.0.0 \
+    jupyterlab==4.2.5 \
+    jupyter-server==2.14.2 \
+    jupyter-events==0.10.0 \
     comfyui-manager \
     joblib
 

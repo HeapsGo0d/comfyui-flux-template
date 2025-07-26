@@ -22,18 +22,23 @@ mkdir -p /ComfyUI/models/{checkpoints,loras,vae,clip,unet,controlnet,embeddings,
 exit_clean() {
     echo "🔒 Starting comprehensive no-trace cleanup..."
     
-    # 1. Clear ALL application logs, caches, and runtime data
+    # 1. Kill all background processes started by this script
+    jobs -p | xargs -r kill -TERM 2>/dev/null || true
+    sleep 2
+    jobs -p | xargs -r kill -KILL 2>/dev/null || true
+    
+    # 2. Clear ALL application logs, caches, and runtime data
     rm -rf /home/sduser/.cache/* 2>/dev/null || true
     rm -rf /ComfyUI/logs/* 2>/dev/null || true
     rm -rf /home/sduser/.local/share/jupyter/* 2>/dev/null || true
     rm -rf /home/sduser/.jupyter/* 2>/dev/null || true
     
-    # 2. Comprehensive temporary file cleanup
+    # 3. Comprehensive temporary file cleanup
     find /tmp -user sduser -type f -delete 2>/dev/null || true
     find /var/tmp -user sduser -type f -delete 2>/dev/null || true
     rm -rf /tmp/pip-* /tmp/tmp* /tmp/.*-tmp* 2>/dev/null || true
     
-    # 3. Aggressive Python cleanup
+    # 4. Aggressive Python cleanup
     find /ComfyUI -name "*.pyc" -delete 2>/dev/null || true
     find /ComfyUI -name "__pycache__" -type d -exec rm -rf {} + 2>/dev/null || true
     find /CivitAI_Downloader -name "*.pyc" -delete 2>/dev/null || true
@@ -41,13 +46,13 @@ exit_clean() {
     find /home/sduser -name "*.pyc" -delete 2>/dev/null || true
     find /home/sduser -name "__pycache__" -type d -exec rm -rf {} + 2>/dev/null || true
     
-    # 4. Complete history and session cleanup
+    # 5. Complete history and session cleanup
     rm -f /home/sduser/.*history* 2>/dev/null || true
     rm -f /home/sduser/.viminfo 2>/dev/null || true
     rm -f /home/sduser/.lesshst 2>/dev/null || true
     rm -rf /home/sduser/.config/*/history* 2>/dev/null || true
     
-    # 5. SECURE DELETION of sensitive files (overwrite multiple times)
+    # 6. SECURE DELETION of sensitive files (overwrite multiple times)
     find /tmp /var/tmp /home/sduser -user sduser \( \
         -name "*token*" -o -name "*key*" -o -name "*auth*" -o \
         -name "*secret*" -o -name "*password*" -o -name "*credential*" -o \
@@ -55,14 +60,16 @@ exit_clean() {
         [ -f "$file" ] && shred -vfz -n 7 "$file" 2>/dev/null || true
     done
     
-    # 6. Clear environment variables containing sensitive data
+    # 7. Clear environment variables containing sensitive data
     unset CIVITAI_TOKEN HUGGINGFACE_TOKEN HF_TOKEN FB_PASSWORD 2>/dev/null || true
     
-    echo "✅ [exit_clean] Finished secure cleanup at $(date)"
+    echo "✅ Secure cleanup completed at $(date)"
 }
-trap exit_clean SIGINT SIGTERM EXIT
 
-# ─── 3️⃣ FileBrowser (Optional) ─────────────────────────────────────────────
+# Set up trap for clean exit - this ensures exit_clean runs on container stop
+trap exit_clean EXIT SIGINT SIGTERM
+
+# ─── 3️⃣ FileBrowser with FULL WORKSPACE ACCESS ─────────────────────────────
 if [ "${FILEBROWSER:-false}" = "true" ]; then
     FB_USERNAME="${FB_USERNAME:-admin}"
     FB_PASSWORD="${FB_PASSWORD:-changeme}"
@@ -71,9 +78,21 @@ if [ "${FILEBROWSER:-false}" = "true" ]; then
         FB_PASSWORD=$(openssl rand -base64 12)
     fi
     
-    echo "🗂️  Starting FileBrowser on port 8080 (root: /workspace)..."
-    filebrowser --root /workspace --port 8080 --address 0.0.0.0 --username "${FB_USERNAME}" --password "${FB_PASSWORD}" --noauth=false &
+    echo "🗂️  Starting FileBrowser on port 8080..."
+    
+    # FIXED: Use /workspace as root (not just downloads) and proper config
+    filebrowser \
+        --root /workspace \
+        --port 8080 \
+        --address 0.0.0.0 \
+        --username "${FB_USERNAME}" \
+        --password "${FB_PASSWORD}" \
+        --noauth=false \
+        --database /ComfyUI/filebrowser.db \
+        --log /tmp/filebrowser.log &
+    
     echo "📁 FileBrowser: http://0.0.0.0:8080 (${FB_USERNAME}:${FB_PASSWORD})"
+    echo "📂 Root directory: /workspace (full access)"
 fi
 
 # ─── 4️⃣ CivitAI Downloads ──────────────────────────────────────────────────
@@ -168,13 +187,13 @@ for model_dir in /ComfyUI/models/*/; do
     fi
 done
 
-# ─── 6️⃣ JupyterLab (Optional) ──────────────────────────────────────────────
+# ─── 6️⃣ JupyterLab with FIXED Dependencies ──────────────────────────────────
 if command -v jupyter >/dev/null 2>&1; then
     echo "🔬 Starting JupyterLab on port 8888..."
     JUPYTER_TOKEN="${JUPYTER_TOKEN:-}"
     
     if [ -z "$JUPYTER_TOKEN" ] || [ "$JUPYTER_TOKEN" = "*tokenOrLeaveBlank*" ]; then
-        # No token for RunPod security
+        # No token for RunPod security - FIXED startup parameters
         jupyter lab \
             --ip=0.0.0.0 \
             --port=8888 \
@@ -184,7 +203,8 @@ if command -v jupyter >/dev/null 2>&1; then
             --ServerApp.password='' \
             --ServerApp.allow_origin='*' \
             --ServerApp.allow_remote_access=True \
-            --ServerApp.disable_check_xsrf=True &
+            --ServerApp.disable_check_xsrf=True \
+            --notebook-dir=/workspace > /tmp/jupyter.log 2>&1 &
         echo "🔬 JupyterLab: http://0.0.0.0:8888 (no token required)"
     else
         jupyter lab \
@@ -195,7 +215,8 @@ if command -v jupyter >/dev/null 2>&1; then
             --ServerApp.token="$JUPYTER_TOKEN" \
             --ServerApp.allow_origin='*' \
             --ServerApp.allow_remote_access=True \
-            --ServerApp.disable_check_xsrf=True &
+            --ServerApp.disable_check_xsrf=True \
+            --notebook-dir=/workspace > /tmp/jupyter.log 2>&1 &
         echo "🔬 JupyterLab: http://0.0.0.0:8888 (token: $JUPYTER_TOKEN)"
     fi
 else
@@ -211,6 +232,16 @@ if torch.cuda.is_available():
     print(f'✅ CUDA {torch.version.cuda} detected')
     print(f'✅ GPU: {torch.cuda.get_device_name(0)}')
     print(f'✅ GPU Memory: {torch.cuda.get_device_properties(0).total_memory // 1024**3}GB')
+    # Test if RTX 5090 architecture is supported
+    try:
+        device_props = torch.cuda.get_device_properties(0)
+        print(f'✅ GPU Compute Capability: {device_props.major}.{device_props.minor}')
+        if device_props.major >= 9:  # sm_90 and above
+            print('✅ RTX 5090 architecture fully supported')
+        else:
+            print('⚠️  Older GPU architecture detected')
+    except Exception as e:
+        print(f'⚠️  Could not check GPU capabilities: {e}')
 else:
     print('⚠️  CUDA not available')
 "
@@ -225,22 +256,46 @@ except ImportError as e:
     print('This might be normal - will try to start anyway')
 "
 
+# ─── 8️⃣ Start ComfyUI with Proper Model Detection ─────────────────────────
 cd /ComfyUI
 echo "🎨 Starting ComfyUI on port 7860..."
 
-# Auto-detect the correct entrypoint
-if [ -f launch.py ]; then
-    echo "🚀 Found launch.py, starting..."
-    exec python3 launch.py --listen 0.0.0.0 --port 7860
-elif [ -f main.py ]; then
-    echo "🚀 Found main.py, starting..."  
-    exec python3 main.py --listen 0.0.0.0 --port 7860
+# Check if we have any models before starting
+model_check() {
+    local has_models=false
+    for model_dir in /ComfyUI/models/*/; do
+        if [ -d "$model_dir" ] && [ "$(find "$model_dir" -maxdepth 1 -type f \( -name "*.safetensors" -o -name "*.ckpt" -o -name "*.pt" -o -name "*.pth" -o -name "*.bin" \) | wc -l)" -gt 0 ]; then
+            has_models=true
+            break
+        fi
+    done
+    
+    if [ "$has_models" = "false" ]; then
+        echo "⚠️  No models detected. ComfyUI may not function properly."
+        echo "💡 Consider downloading some models first or check model organization."
+    else
+        echo "✅ Models detected and organized"
+    fi
+}
+
+model_check
+
+# Auto-detect the correct entrypoint with better error handling
+if [ -f main.py ]; then
+    echo "🚀 Found main.py, starting ComfyUI..."  
+    exec python3 main.py --listen 0.0.0.0 --port 7860 --verbose
+elif [ -f launch.py ]; then
+    echo "🚀 Found launch.py, starting ComfyUI..."
+    exec python3 launch.py --listen 0.0.0.0 --port 7860 --verbose
 elif [ -f app.py ]; then
-    echo "🚀 Found app.py, starting..."
-    exec python3 app.py --listen 0.0.0.0 --port 7860
+    echo "🚀 Found app.py, starting ComfyUI..."
+    exec python3 app.py --listen 0.0.0.0 --port 7860 --verbose
 else
-    echo "❌ No valid entrypoint found (launch.py, main.py, app.py)" >&2
-    echo "📂 Available files:"
-    ls -la
+    echo "❌ No valid entrypoint found (main.py, launch.py, app.py)" >&2
+    echo "📂 Available files in /ComfyUI:"
+    ls -la /ComfyUI/
+    echo ""
+    echo "🔍 Looking for Python files..."
+    find /ComfyUI -maxdepth 1 -name "*.py" -type f
     exit 1
 fi

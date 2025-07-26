@@ -8,25 +8,32 @@ if ! command -v jq >/dev/null 2>&1; then
   exit 1
 fi
 
-# 2️⃣ Define the multi-line readme content. No escaping needed.
+# 2️⃣ Define the multi-line readme content with FIXES
 README_CONTENT=$(cat <<'EOF'
-## ComfyUI-Flux Template (RTX 5090 Compatible)
+## ComfyUI-Flux Template (RTX 5090 Compatible) - FIXED VERSION
 
-This template runs ComfyUI with Flux models, including optional FileBrowser and JupyterLab.
-**✅ UPDATED: Full RTX 5090 support with CUDA 12.4 and PyTorch 2.4.1**
+This template runs ComfyUI with Flux models, including FileBrowser and JupyterLab.
+**✅ FIXED: Full RTX 5090 support, proper FileBrowser access, stable JupyterLab**
+
+### 🔧 Recent FIXES Applied:
+- **RTX 5090 Support**: PyTorch nightly with sm_120 compatibility 
+- **FileBrowser**: Full /workspace access (not just downloads)
+- **JupyterLab**: Fixed httpx/anyio version conflicts 
+- **Exit Cleanup**: Proper trap handling for secure cleanup
+- **Model Detection**: Better model organization and verification
 
 ### Services:
 - **ComfyUI**: Port 7860 (main interface)
-- **FileBrowser**: Port 8080 (file management with full /workspace access) 
-- **JupyterLab**: Port 8888 (development, no token required)
+- **FileBrowser**: Port 8080 (FULL /workspace access with proper auth) 
+- **JupyterLab**: Port 8888 (development, fixed dependencies)
 
 ### 🚀 Key Features:
-- **RTX 4090/5090 Support**: CUDA 12.4 with sm_120 compatibility
+- **RTX 4090/5090 Support**: CUDA 12.4 with PyTorch nightly (sm_120 compatible)
 - **Smart Model Organization**: Auto-detects and organizes all model types
 - **HuggingFace Integration**: Downloads and symlinks FLUX.1-dev models
 - **CivitAI Support**: Downloads checkpoints, LoRAs, VAEs with API token
-- **Maximum Security**: Complete trace elimination on container exit
-- **Optimized Performance**: XFormers 0.0.28.post1 with CUDA acceleration
+- **Maximum Security**: Complete trace elimination on container exit (FIXED)
+- **Optimized Performance**: Latest XFormers with CUDA acceleration
 
 ### Environment Variables:
 - `USE_VOLUME`: Enable persistent storage (true/false)
@@ -51,12 +58,18 @@ Models are automatically organized into:
 - `/ComfyUI/models/controlnet/` - ControlNet models
 - `/ComfyUI/models/embeddings/` - Textual inversions
 
-### 🛡️ Security Features:
+### 🛡️ Security Features (FIXED):
 - Non-root execution with sduser
-- Complete trace elimination on exit
+- Complete trace elimination on exit (proper trap handling)
 - Secure credential handling
 - History and cache cleanup
 - Memory and swap clearing
+
+### 📁 FileBrowser Access (FIXED):
+- **Full /workspace access** (not limited to downloads)
+- Proper database configuration
+- Secure authentication
+- File management for all ComfyUI directories
 
 ### Volume:
 - Mount path: `/workspace` 
@@ -65,9 +78,10 @@ Models are automatically organized into:
 
 ### 🔧 Technical Details:
 - Base: CUDA 12.4 + Ubuntu 22.04
-- PyTorch: 2.4.1+cu124 (RTX 5090 compatible)
-- XFormers: 0.0.28.post1 optimized
-- Python: 3.10 with comprehensive dependencies
+- PyTorch: Nightly build (RTX 5090 sm_120 compatible)
+- XFormers: Latest version optimized for new GPUs
+- Python: 3.10 with fixed dependency versions
+- JupyterLab: 4.2.5 with compatible httpx/anyio versions
 EOF
 )
 
@@ -90,8 +104,8 @@ EOF
 
 # 4️⃣ Use jq to build the 'input' object for the variables.
 INPUT_VARIABLES=$(jq -n \
-  --arg name "ComfyUI-Flux-RTX5090" \
-  --arg imageName "joyc0025/comfyui-flux:v2-rtx5090" \
+  --arg name "ComfyUI-Flux-RTX5090-FIXED" \
+  --arg imageName "joyc0025/comfyui-flux:v3-rtx5090-fixed" \
   --argjson cDisk 120 \
   --argjson vGb 0 \
   --arg vPath "/workspace" \
@@ -152,10 +166,10 @@ fi
 echo "✅ Template created successfully!"
 echo "$body" | jq .
 echo ""
-echo "🚀 Key improvements in this version:"
-echo "  ✅ RTX 5090 support (CUDA 12.4 + PyTorch 2.4.1)"
-echo "  ✅ Smart model organization with symlinks"
-echo "  ✅ Full /workspace access in FileBrowser"
-echo "  ✅ Fixed JupyterLab httpx compatibility"
-echo "  ✅ Enhanced HuggingFace model detection"
-echo "  ✅ Improved security and cleanup procedures"
+echo "🚀 FIXED issues in this version:"
+echo "  ✅ RTX 5090 support (PyTorch nightly with sm_120)"
+echo "  ✅ FileBrowser with FULL /workspace access"
+echo "  ✅ JupyterLab with fixed httpx/anyio versions"
+echo "  ✅ Proper exit cleanup with trap handling"
+echo "  ✅ Enhanced model organization and detection"
+echo "  ✅ Better error handling and logging"
