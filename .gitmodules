@@ -1,0 +1,6 @@
+[submodule "submodules/Hearmeman24_template"]
+	path = submodules/Hearmeman24_template
+	url = https://github.com/Hearmeman24/comfyui-flux-template.git
+[submodule "submodules/camenduru_template"]
+	path = submodules/camenduru_template
+	url = https://github.com/camenduru/flux-runpod.git
