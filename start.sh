@@ -111,26 +111,26 @@ fi
 if [ -n "${CIVITAI_TOKEN:-}" ] && [ "${CIVITAI_TOKEN}" != "*update*" ]; then
     echo "🔽 Downloading models from CivitAI..."
     cd /CivitAI_Downloader
-    
-    DOWNLOAD_CMD="python3 download_with_aria.py --token ${CIVITAI_TOKEN} --output-dir ${DOWNLOAD_DIR}"
+
+    download_args=("--token" "${CIVITAI_TOKEN}" "--output-dir" "${DOWNLOAD_DIR}")
     HAS_DOWNLOADS=false
     
     if [ -n "${CHECKPOINT_IDS_TO_DOWNLOAD:-}" ] && [ "${CHECKPOINT_IDS_TO_DOWNLOAD}" != "*update*" ]; then
-        DOWNLOAD_CMD+=" --checkpoint-ids ${CHECKPOINT_IDS_TO_DOWNLOAD}"
+        download_args+=("--checkpoint-ids" "${CHECKPOINT_IDS_TO_DOWNLOAD}")
         HAS_DOWNLOADS=true
     fi
     if [ -n "${LORA_IDS_TO_DOWNLOAD:-}" ] && [ "${LORA_IDS_TO_DOWNLOAD}" != "*update*" ]; then
-        DOWNLOAD_CMD+=" --lora-ids ${LORA_IDS_TO_DOWNLOAD}"
+        download_args+=("--lora-ids" "${LORA_IDS_TO_DOWNLOAD}")
         HAS_DOWNLOADS=true
     fi  
     if [ -n "${VAE_IDS_TO_DOWNLOAD:-}" ] && [ "${VAE_IDS_TO_DOWNLOAD}" != "*update*" ]; then
-        DOWNLOAD_CMD+=" --vae-ids ${VAE_IDS_TO_DOWNLOAD}"
+        download_args+=("--vae-ids" "${VAE_IDS_TO_DOWNLOAD}")
         HAS_DOWNLOADS=true
     fi
     
     if [ "$HAS_DOWNLOADS" = "true" ]; then
         echo "🎯 Running download command..."
-        eval ${DOWNLOAD_CMD} || echo "⚠️  CivitAI download failed, continuing..."
+        python3 download_with_aria.py "${download_args[@]}" || echo "⚠️  CivitAI download failed, continuing..."
     else
         echo "⚠️  No valid CivitAI model IDs specified, skipping..."
     fi
@@ -246,3 +246,10 @@ if torch.cuda.is_available():
             print('✅ GPU architecture supported')
     except Exception as e:
         print(f
+
+# ─── 8️⃣ Launch ComfyUI ─────────────────────────────────────────────────────
+echo "✅ All services started. Launching ComfyUI..."
+cd /ComfyUI
+
+# Launch ComfyUI on port 7860 for the UI and 8188 for the API (used by healthcheck)
+python3 main.py --listen 0.0.0.0 --port 7860

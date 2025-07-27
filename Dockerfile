@@ -1,6 +1,6 @@
 # ─── DEFINITIVE RTX 5090 SOLUTION ─────────────────────────────────────────
 # Use NVIDIA's official PyTorch container with RTX 5090 support
-FROM nvcr.io/nvidia/pytorch:25.04-py3
+FROM nvcr.io/nvidia/pytorch:24.04-py3
 
 ENV DEBIAN_FRONTEND=noninteractive \
     PYTHONUNBUFFERED=1 \
@@ -15,15 +15,14 @@ RUN apt-get update && \
     apt-get install -y --no-install-recommends \
         git wget aria2 curl openssl unzip \
         build-essential libglib2.0-0 \
-        libjpeg-dev libpng-dev \
+        libjpeg-dev libpng-dev libsentencepiece-dev \
         libsm6 libxext6 libxrender-dev libgomp1 \
         nodejs npm \
+    && npm install -g yarn \
+    && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
-# Fix JupyterLab nodejs warning by installing required packages
-RUN npm install -g yarn
-
-# Install additional Python packages needed for ComfyUI
+# Install Python packages, xformers, and Jupyter extensions in a single layer
 RUN pip install --no-cache-dir \
     pillow>=9.0.0 \
     requests>=2.28.0 \
@@ -33,13 +32,10 @@ RUN pip install --no-cache-dir \
     huggingface_hub>=0.19.0 \
     einops>=0.7.0 \
     comfyui-manager \
-    joblib
-
-# Install latest xformers compatible with NVIDIA PyTorch
-RUN pip install --no-cache-dir xformers --upgrade
-
-# Install JupyterLab extensions for better functionality
-RUN pip install --no-cache-dir \
+    joblib \
+    # Install latest xformers compatible with NVIDIA PyTorch
+    xformers \
+    # Install JupyterLab extensions
     jupyterlab-git \
     jupyterlab_widgets
 
@@ -51,8 +47,12 @@ RUN curl -fsSL "https://github.com/filebrowser/filebrowser/releases/latest/downl
   | tar -xz -C /usr/local/bin filebrowser && chmod +x /usr/local/bin/filebrowser
 
 # Clone repositories (without --depth 1 to avoid git describe issues)
-RUN git clone https://github.com/comfyanonymous/ComfyUI.git /ComfyUI
-RUN git clone https://github.com/Hearmeman24/CivitAI_Downloader.git /CivitAI_Downloader
+# Pinning to a specific commit ensures reproducible builds
+RUN git clone https://github.com/comfyanonymous/ComfyUI.git /ComfyUI && \
+    (cd /ComfyUI && git checkout c936ab4f19a3e632637026325493454317a3604a)
+
+RUN git clone https://github.com/Hearmeman24/CivitAI_Downloader.git /CivitAI_Downloader && \
+    (cd /CivitAI_Downloader && git checkout 1f3e786196434455828450702157797746522c71)
 
 # Install ComfyUI's specific dependencies
 WORKDIR /ComfyUI
@@ -83,6 +83,6 @@ EXPOSE 7860 8080 8888
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
-  CMD curl -f http://localhost:7860 >/dev/null || exit 1
+  CMD curl -f http://localhost:8188/queue >/dev/null || exit 1
 
 ENTRYPOINT ["start.sh"]

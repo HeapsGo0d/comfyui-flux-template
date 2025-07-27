@@ -59,41 +59,28 @@ move_or_link_file() {
 
 # Enhanced model detection function
 classify_model() {
-    local filepath="$1"
-    local filename="$(basename "$filepath")"
-    local filename_lower="$(echo "$filename" | tr '[:upper:]' '[:lower:]')"
-    local dest_dir=""
-    local model_type=""
-    
-    # Enhanced pattern matching with path context
-    if [[ "$filename_lower" == *"vae"* ]] || [[ "$filepath" == *"/vae/"* ]]; then
-        dest_dir="/ComfyUI/models/vae"
-        model_type="VAE"
-    elif [[ "$filename_lower" == *"flux"* ]] || [[ "$filename_lower" == *"unet"* ]] || [[ "$filename_lower" == *"dit"* ]] || [[ "$filepath" == *"transformer"* ]]; then
-        dest_dir="/ComfyUI/models/unet"
-        model_type="UNET/Flux"
-    elif [[ "$filename_lower" == *"clip"* ]] || [[ "$filename_lower" == *"t5"* ]] || [[ "$filepath" == *"text_encoder"* ]]; then
-        dest_dir="/ComfyUI/models/clip"
-        model_type="CLIP"
-    elif [[ "$filename_lower" == *"lora"* ]] || [[ "$filename_lower" == *"lycoris"* ]]; then
-        dest_dir="/ComfyUI/models/loras"
-        model_type="LoRA"
-    elif [[ "$filename_lower" == *"embedding"* ]] || [[ "$filename_lower" == *"textual_inversion"* ]] || [[ "$filename_lower" == *"ti_"* ]]; then
-        dest_dir="/ComfyUI/models/embeddings"
-        model_type="Embedding"
-    elif [[ "$filename_lower" == *"controlnet"* ]] || [[ "$filename_lower" == *"control_"* ]]; then
-        dest_dir="/ComfyUI/models/controlnet"
-        model_type="ControlNet"
-    elif [[ "$filename_lower" == *"upscaler"* ]] || [[ "$filename_lower" == *"esrgan"* ]] || [[ "$filename_lower" == *"realesrgan"* ]]; then
-        dest_dir="/ComfyUI/models/upscale_models"
-        model_type="Upscaler"
-    else
-        # Default to checkpoints for unknown types
-        dest_dir="/ComfyUI/models/checkpoints"
-        model_type="Checkpoint"
-    fi
-    
-    echo "${dest_dir}|${model_type}"
+    local path_lower
+    path_lower=$(echo "$1" | tr '[:upper:]' '[:lower:]')
+
+    case "$path_lower" in
+        *vae*)
+            echo "/ComfyUI/models/vae|VAE" ;;
+        *flux*|*unet*|*dit*|*transformer*)
+            echo "/ComfyUI/models/unet|UNET/Flux" ;;
+        *clip*|*t5*|*text_encoder*)
+            echo "/ComfyUI/models/clip|CLIP" ;;
+        *lora*|*lycoris*)
+            echo "/ComfyUI/models/loras|LoRA" ;;
+        *embedding*|*textual_inversion*|*ti_*)
+            echo "/ComfyUI/models/embeddings|Embedding" ;;
+        *controlnet*|*control_*)
+            echo "/ComfyUI/models/controlnet|ControlNet" ;;
+        *upscaler*|*esrgan*|*realesrgan*)
+            echo "/ComfyUI/models/upscale_models|Upscaler" ;;
+        *)
+            # Default to checkpoints for unknown types
+            echo "/ComfyUI/models/checkpoints|Checkpoint" ;;
+    esac
 }
 
 # Process all model files
@@ -126,46 +113,11 @@ echo "📊 Processing Summary:"
 echo "  Total files found: ${total_files}"
 echo "  Files organized: ${moved_count}"
 
-# Handle Hugging Face cache structure specifically
-echo ""
-echo "🤗 Processing Hugging Face cached models..."
-hf_count=0
-
-# Look for HuggingFace cache directories
-for hf_dir in "${DOWNLOAD_DIR}"/models--*; do
-    if [ -d "$hf_dir" ]; then
-        echo "📂 Processing HF cache: $(basename "$hf_dir")"
-        
-        # Find all model files in this HF cache
-        while IFS= read -r -d '' hf_file; do
-            if [ ! -f "$hf_file" ]; then
-                continue
-            fi
-            
-            ((hf_count++))
-            echo "🤗 HF file: $hf_file"
-            
-            # Get classification
-            classification=$(classify_model "$hf_file")
-            dest_dir=$(echo "$classification" | cut -d'|' -f1)
-            model_type=$(echo "$classification" | cut -d'|' -f2)
-            
-            filename="$(basename "$hf_file")"
-            dest_file="${dest_dir}/${filename}"
-            
-            move_or_link_file "$hf_file" "$dest_file" "HF-${model_type}"
-            
-        done < <(find "$hf_dir" -type f \( -name "*.safetensors" -o -name "*.bin" -o -name "*.pt" -o -name "*.pth" \) -print0)
-    fi
-done
-
-echo "  HuggingFace files processed: ${hf_count}"
-
 # Clean up empty directories
 find "${DOWNLOAD_DIR}" -type d -empty -delete 2>/dev/null || true
 
 echo ""
-echo "✅ Organization complete! Total files organized: $((moved_count + hf_count))"
+echo "✅ Organization complete!"
 
 # Show detailed summary of organized models
 echo ""
