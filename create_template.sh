@@ -41,14 +41,6 @@ This template provides a robust environment for running ComfyUI with FLUX models
 - **Persistent Storage**: To save your work, models, and outputs between sessions, set the `USE_VOLUME` environment variable to `true` and ensure a volume is attached.
 
 
-### 🚀 Key Features:
-- **RTX 4090/5090 Support**: NVIDIA PyTorch container with native sm_120 compatibility
-- **Smart Model Organization**: Enhanced script with debugging and HuggingFace cache handling
-- **HuggingFace Integration**: Downloads and properly organizes FLUX.1-dev models
-- **CivitAI Support**: Downloads checkpoints, LoRAs, VAEs with API token
-- **Maximum Security**: Complete trace elimination on container exit
-- **Optimized Performance**: Official NVIDIA optimizations for Blackwell architecture
-
 ### Environment Variables:
 - `USE_VOLUME`: Set to `true` to use a persistent volume for `/workspace`.
 - `FILEBROWSER`: Set to `true` to enable the FileBrowser service.
