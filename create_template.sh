@@ -40,7 +40,6 @@ This template provides a robust environment for running ComfyUI with FLUX models
 - **Default**: Runs in ephemeral mode using the container disk (100 GB). **All data will be wiped when the pod stops.**
 - **Persistent Storage**: To save your work, models, and outputs between sessions, set the `USE_VOLUME` environment variable to `true` and ensure a volume is attached.
 
-
 ### Environment Variables:
 - `USE_VOLUME`: Set to `true` to use a persistent volume for `/workspace`.
 - `FILEBROWSER`: Set to `true` to enable the FileBrowser service.

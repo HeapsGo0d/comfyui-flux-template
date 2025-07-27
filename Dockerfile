@@ -50,7 +50,7 @@ RUN curl -fsSL "https://github.com/filebrowser/filebrowser/releases/latest/downl
 # Pinning to a specific commit ensures reproducible builds
 # Updated commit hash to a recent, valid one.
 RUN git clone https://github.com/comfyanonymous/ComfyUI.git /ComfyUI && \
-    (cd /ComfyUI && git checkout 325e046b22046037415d9b0a94b1a643522b7a26)
+    (cd /ComfyUI && git checkout 62732325c8f937536645d8e0054749f7a1f55b9a)
 
 RUN git clone https://github.com/Hearmeman24/CivitAI_Downloader.git /CivitAI_Downloader && \
     (cd /CivitAI_Downloader && git checkout 1f3e786196434455828450702157797746522c71)
