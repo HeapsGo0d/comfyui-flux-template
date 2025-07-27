@@ -2,8 +2,8 @@
 set -euo pipefail
 
 # ─── Configuration ──────────────────────────────────────────────────────────
-# IMPORTANT: Update this to your Docker Hub image name and tag.
-readonly IMAGE_NAME="joyc0025/comfyui-flux:v4-definitive-fixed"
+# IMPORTANT: Update this to your Docker Hub image name and tag
+readonly IMAGE_NAME="joyc0025/comfyui-flux-rtx5090"
 
 # ─── Pre-flight Checks ──────────────────────────────────────────────────────
 : "${RUNPOD_API_KEY:?Error: Please set the RUNPOD_API_KEY environment variable.}"
@@ -35,6 +35,19 @@ This template provides a robust environment for running ComfyUI with FLUX models
 - **ComfyUI**: Port `7860` (Main UI)
 - **FileBrowser**: Port `8080` (Full `/workspace` access)
 - **JupyterLab**: Port `8888` (Development environment)
+
+### 💾 Storage Configuration:
+- **Default**: Runs in ephemeral mode using the container disk (100 GB). **All data will be wiped when the pod stops.**
+- **Persistent Storage**: To save your work, models, and outputs between sessions, set the `USE_VOLUME` environment variable to `true` and ensure a volume is attached.
+
+
+### 🚀 Key Features:
+- **RTX 4090/5090 Support**: NVIDIA PyTorch container with native sm_120 compatibility
+- **Smart Model Organization**: Enhanced script with debugging and HuggingFace cache handling
+- **HuggingFace Integration**: Downloads and properly organizes FLUX.1-dev models
+- **CivitAI Support**: Downloads checkpoints, LoRAs, VAEs with API token
+- **Maximum Security**: Complete trace elimination on container exit
+- **Optimized Performance**: Official NVIDIA optimizations for Blackwell architecture
 
 ### Environment Variables:
 - `USE_VOLUME`: Set to `true` to use a persistent volume for `/workspace`.
@@ -96,9 +109,9 @@ EOF
 # Use jq to build the 'input' object for the variables.
 # Reduced containerDiskInGb to a more reasonable size.
 INPUT_VARIABLES=$(jq -n \
-  --arg name "ComfyUI-Flux-RTX5090" \
+  --arg name "comfyui-flux-rtx5090" \
   --arg imageName "$IMAGE_NAME" \
-  --argjson cDisk 25 \
+  --argjson cDisk 100 \
   --argjson vGb 30 \
   --arg vPath "/workspace" \
   --arg dArgs "" \
@@ -115,7 +128,7 @@ INPUT_VARIABLES=$(jq -n \
       ports: $ports,
       readme: $readme,
       env: [
-        { "key": "USE_VOLUME", "value": "true" },
+        { "key": "USE_VOLUME", "value": "false" },
         { "key": "FILEBROWSER", "value": "true" },
         { "key": "FB_USERNAME", "value": "admin" },
         { "key": "FB_PASSWORD", "value": "{{ RUNPOD_SECRET_FILEBROWSER_PASSWORD }}" },
