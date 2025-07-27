@@ -76,9 +76,6 @@ RUN echo 'HISTSIZE=0' >> /home/sduser/.bashrc && \
 # Switch to non-root user
 USER sduser
 
-# Final verification that everything works as sduser
-RUN python3 -c "import torch; print(f'✅ PyTorch {torch.__version__} ready'); print(f'✅ RTX 5090 support: {\"RTX 5090\" in torch.cuda.get_device_name(0) if torch.cuda.is_available() else \"Will detect at runtime\"}')"
-
 # Expose all necessary ports
 EXPOSE 7860 8080 8888
 
