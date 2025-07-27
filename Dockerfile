@@ -26,7 +26,6 @@ RUN npm install -g yarn
 # Install additional Python packages needed for ComfyUI
 RUN pip install --no-cache-dir \
     pillow>=9.0.0 \
-    urllib3==1.26.18 \
     requests>=2.28.0 \
     certifi>=2022.12.7 \
     transformers>=4.35.0 \
