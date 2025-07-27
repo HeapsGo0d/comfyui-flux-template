@@ -245,11 +245,13 @@ if torch.cuda.is_available():
         else:
             print('✅ GPU architecture supported')
     except Exception as e:
-        print(f
+        print(f"❌ GPU verification failed: {e}")
+else:
+    print("⚠️  CUDA not available, running in CPU mode.")
 
 # ─── 8️⃣ Launch ComfyUI ─────────────────────────────────────────────────────
 echo "✅ All services started. Launching ComfyUI..."
 cd /ComfyUI
 
-# Launch ComfyUI on port 7860 for the UI and 8188 for the API (used by healthcheck)
+# Launch ComfyUI on port 7860, which is used for both the UI and the API healthcheck
 python3 main.py --listen 0.0.0.0 --port 7860
