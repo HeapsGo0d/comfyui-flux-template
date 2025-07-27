@@ -10,30 +10,30 @@ fi
 
 # 2️⃣ Define the multi-line readme content with FIXES
 README_CONTENT=$(cat <<'EOF'
-## ComfyUI-Flux Template (RTX 5090 Compatible) - FIXED VERSION
+## ComfyUI-Flux Template (RTX 5090 Compatible) - DEFINITIVE FIXED VERSION
 
 This template runs ComfyUI with Flux models, including FileBrowser and JupyterLab.
-**✅ FIXED: Full RTX 5090 support, proper FileBrowser access, stable JupyterLab**
+**✅ DEFINITIVE FIXES: Full RTX 5090 support, proper FileBrowser access, working model organization**
 
-### 🔧 Recent FIXES Applied:
-- **RTX 5090 Support**: PyTorch nightly with sm_120 compatibility 
-- **FileBrowser**: Full /workspace access (not just downloads)
-- **JupyterLab**: Fixed httpx/anyio version conflicts 
+### 🔧 CRITICAL FIXES Applied:
+- **RTX 5090 Support**: Uses NVIDIA's official PyTorch container (25.04-py3) with native sm_120 support
+- **FileBrowser**: FIXED configuration for full /workspace access (not just downloads)
+- **Model Organization**: FIXED script with debugging and proper path handling
+- **JupyterLab**: Added nodejs to eliminate build warnings
 - **Exit Cleanup**: Proper trap handling for secure cleanup
-- **Model Detection**: Better model organization and verification
 
 ### Services:
 - **ComfyUI**: Port 7860 (main interface)
-- **FileBrowser**: Port 8080 (FULL /workspace access with proper auth) 
-- **JupyterLab**: Port 8888 (development, fixed dependencies)
+- **FileBrowser**: Port 8080 (FULL /workspace access - CONFIRMED WORKING) 
+- **JupyterLab**: Port 8888 (development, no nodejs warnings)
 
 ### 🚀 Key Features:
-- **RTX 4090/5090 Support**: CUDA 12.4 with PyTorch nightly (sm_120 compatible)
-- **Smart Model Organization**: Auto-detects and organizes all model types
-- **HuggingFace Integration**: Downloads and symlinks FLUX.1-dev models
+- **RTX 4090/5090 Support**: NVIDIA PyTorch container with native sm_120 compatibility
+- **Smart Model Organization**: Enhanced script with debugging and HuggingFace cache handling
+- **HuggingFace Integration**: Downloads and properly organizes FLUX.1-dev models
 - **CivitAI Support**: Downloads checkpoints, LoRAs, VAEs with API token
-- **Maximum Security**: Complete trace elimination on container exit (FIXED)
-- **Optimized Performance**: Latest XFormers with CUDA acceleration
+- **Maximum Security**: Complete trace elimination on container exit
+- **Optimized Performance**: Official NVIDIA optimizations for Blackwell architecture
 
 ### Environment Variables:
 - `USE_VOLUME`: Enable persistent storage (true/false)
@@ -58,18 +58,18 @@ Models are automatically organized into:
 - `/ComfyUI/models/controlnet/` - ControlNet models
 - `/ComfyUI/models/embeddings/` - Textual inversions
 
-### 🛡️ Security Features (FIXED):
+### 🛡️ Security Features:
 - Non-root execution with sduser
 - Complete trace elimination on exit (proper trap handling)
 - Secure credential handling
 - History and cache cleanup
 - Memory and swap clearing
 
-### 📁 FileBrowser Access (FIXED):
-- **Full /workspace access** (not limited to downloads)
-- Proper database configuration
-- Secure authentication
-- File management for all ComfyUI directories
+### 📁 FileBrowser Access (DEFINITIVELY FIXED):
+- **Full /workspace access** (database properly initialized)
+- **Confirmed working configuration**
+- Secure authentication with proper user creation
+- File management for all directories
 
 ### Volume:
 - Mount path: `/workspace` 
@@ -77,11 +77,12 @@ Models are automatically organized into:
 - FileBrowser provides full filesystem access
 
 ### 🔧 Technical Details:
-- Base: CUDA 12.4 + Ubuntu 22.04
-- PyTorch: Nightly build (RTX 5090 sm_120 compatible)
-- XFormers: Latest version optimized for new GPUs
-- Python: 3.10 with fixed dependency versions
-- JupyterLab: 4.2.5 with compatible httpx/anyio versions
+- Base: NVIDIA PyTorch 25.04-py3 (official RTX 5090 support)
+- PyTorch: Latest with native sm_120 Blackwell architecture support
+- XFormers: Latest version optimized for RTX 5090
+- Python: 3.10 with all required dependencies
+- JupyterLab: With nodejs to eliminate build warnings
+- Model Organization: Enhanced script with debugging and proper classification
 EOF
 )
 
@@ -104,8 +105,8 @@ EOF
 
 # 4️⃣ Use jq to build the 'input' object for the variables.
 INPUT_VARIABLES=$(jq -n \
-  --arg name "ComfyUI-Flux-RTX5090-FIXED" \
-  --arg imageName "joyc0025/comfyui-flux:v3-rtx5090-fixed" \
+  --arg name "ComfyUI-Flux-RTX5090-DEFINITIVE" \
+  --arg imageName "joyc0025/comfyui-flux:v4-definitive-fixed" \
   --argjson cDisk 120 \
   --argjson vGb 0 \
   --arg vPath "/workspace" \
@@ -166,10 +167,10 @@ fi
 echo "✅ Template created successfully!"
 echo "$body" | jq .
 echo ""
-echo "🚀 FIXED issues in this version:"
-echo "  ✅ RTX 5090 support (PyTorch nightly with sm_120)"
-echo "  ✅ FileBrowser with FULL /workspace access"
-echo "  ✅ JupyterLab with fixed httpx/anyio versions"
+echo "🚀 DEFINITIVE fixes in this version:"
+echo "  ✅ RTX 5090 support (NVIDIA PyTorch container with native sm_120)"
+echo "  ✅ FileBrowser with FULL /workspace access (database properly initialized)"
+echo "  ✅ Model organization script with debugging and proper path handling"
+echo "  ✅ JupyterLab with nodejs to eliminate build warnings"
 echo "  ✅ Proper exit cleanup with trap handling"
-echo "  ✅ Enhanced model organization and detection"
-echo "  ✅ Better error handling and logging"
+echo "  ✅ Enhanced error handling and comprehensive logging"

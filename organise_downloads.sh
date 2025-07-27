@@ -2,13 +2,28 @@
 set -euo pipefail
 
 DOWNLOAD_DIR="${1:-/workspace/downloads}"
-echo "🗂️  Organizing .safetensors files from ${DOWNLOAD_DIR}"
+echo "🗂️  Organizing model files from ${DOWNLOAD_DIR}"
 
-# Check if directory exists
-if [ ! -d "${DOWNLOAD_DIR}" ]; then
-    echo "⚠️  Directory ${DOWNLOAD_DIR} does not exist, skipping organization"
+# Debug: Show what we're working with
+echo "🔍 Debug: Checking download directory structure..."
+if [ -d "${DOWNLOAD_DIR}" ]; then
+    echo "✅ Download directory exists: ${DOWNLOAD_DIR}"
+    echo "📂 Directory contents:"
+    ls -la "${DOWNLOAD_DIR}" || echo "⚠️  Could not list directory contents"
+    
+    echo ""
+    echo "🔍 Debug: Looking for model files..."
+    find "${DOWNLOAD_DIR}" -type f \( -name "*.safetensors" -o -name "*.ckpt" -o -name "*.pt" -o -name "*.pth" -o -name "*.bin" \) | head -10 || echo "⚠️  No model files found with find command"
+else
+    echo "❌ Directory ${DOWNLOAD_DIR} does not exist"
+    echo "🔍 Debug: Checking parent directories..."
+    ls -la /workspace/ || echo "⚠️  Could not list /workspace/"
     exit 0
 fi
+
+# Create all ComfyUI model directories
+echo "📁 Creating ComfyUI model directories..."
+mkdir -p /ComfyUI/models/{checkpoints,loras,vae,clip,unet,controlnet,embeddings,upscale_models}
 
 # Counter for moved files
 moved_count=0
@@ -19,10 +34,15 @@ move_or_link_file() {
     local dest_file="$2"
     local model_type="$3"
     
+    echo "🔄 Processing: $src_file -> $dest_file"
+    
     if [ -f "$dest_file" ]; then
         echo "⚠️  File already exists: $(basename "$dest_file") (skipping)"
         return 0
     fi
+    
+    # Ensure destination directory exists
+    mkdir -p "$(dirname "$dest_file")"
     
     # Try to create a symlink first (saves space), fallback to copy
     if ln -sf "$src_file" "$dest_file" 2>/dev/null; then
@@ -37,23 +57,22 @@ move_or_link_file() {
     fi
 }
 
-# Find and organize .safetensors files
-find "${DOWNLOAD_DIR}" -type f -name "*.safetensors" | while read -r filepath; do
-    if [ ! -f "$filepath" ]; then
-        continue
-    fi
+# Enhanced model detection function
+classify_model() {
+    local filepath="$1"
+    local filename="$(basename "$filepath")"
+    local filename_lower="$(echo "$filename" | tr '[:upper:]' '[:lower:]')"
+    local dest_dir=""
+    local model_type=""
     
-    filename="$(basename "$filepath")"
-    filename_lower="$(echo "$filename" | tr '[:upper:]' '[:lower:]')"
-    
-    # Enhanced pattern matching for better model detection
-    if [[ "$filename_lower" == *"vae"* ]]; then
+    # Enhanced pattern matching with path context
+    if [[ "$filename_lower" == *"vae"* ]] || [[ "$filepath" == *"/vae/"* ]]; then
         dest_dir="/ComfyUI/models/vae"
         model_type="VAE"
-    elif [[ "$filename_lower" == *"flux"* ]] || [[ "$filename_lower" == *"unet"* ]] || [[ "$filename_lower" == *"dit"* ]]; then
+    elif [[ "$filename_lower" == *"flux"* ]] || [[ "$filename_lower" == *"unet"* ]] || [[ "$filename_lower" == *"dit"* ]] || [[ "$filepath" == *"transformer"* ]]; then
         dest_dir="/ComfyUI/models/unet"
         model_type="UNET/Flux"
-    elif [[ "$filename_lower" == *"clip"* ]] || [[ "$filename_lower" == *"t5"* ]]; then
+    elif [[ "$filename_lower" == *"clip"* ]] || [[ "$filename_lower" == *"t5"* ]] || [[ "$filepath" == *"text_encoder"* ]]; then
         dest_dir="/ComfyUI/models/clip"
         model_type="CLIP"
     elif [[ "$filename_lower" == *"lora"* ]] || [[ "$filename_lower" == *"lycoris"* ]]; then
@@ -74,119 +93,85 @@ find "${DOWNLOAD_DIR}" -type f -name "*.safetensors" | while read -r filepath; d
         model_type="Checkpoint"
     fi
     
-    # Create destination directory if it doesn't exist
-    mkdir -p "$dest_dir"
-    
-    # Move or link the file
-    dest_file="${dest_dir}/${filename}"
-    move_or_link_file "$filepath" "$dest_file" "$model_type"
-done
+    echo "${dest_dir}|${model_type}"
+}
 
-# Also handle .ckpt files (legacy checkpoint format)
-find "${DOWNLOAD_DIR}" -type f -name "*.ckpt" | while read -r filepath; do
+# Process all model files
+echo "🔍 Scanning for model files..."
+total_files=0
+
+# Find all model files and process them
+while IFS= read -r -d '' filepath; do
     if [ ! -f "$filepath" ]; then
         continue
     fi
     
-    filename="$(basename "$filepath")"
-    filename_lower="$(echo "$filename" | tr '[:upper:]' '[:lower:]')"
+    ((total_files++))
+    echo "📄 Found file: $filepath"
     
-    # Better classification for .ckpt files
-    if [[ "$filename_lower" == *"vae"* ]]; then
-        dest_dir="/ComfyUI/models/vae"
-        model_type="VAE"
-    elif [[ "$filename_lower" == *"controlnet"* ]]; then
-        dest_dir="/ComfyUI/models/controlnet"
-        model_type="ControlNet"
-    else
-        dest_dir="/ComfyUI/models/checkpoints"
-        model_type="Checkpoint"
-    fi
-    
-    dest_file="${dest_dir}/${filename}"
-    mkdir -p "$dest_dir"
-    move_or_link_file "$filepath" "$dest_file" "$model_type"
-done
-
-# Handle .pt and .pth files (PyTorch models)
-find "${DOWNLOAD_DIR}" -type f \( -name "*.pt" -o -name "*.pth" \) | while read -r filepath; do
-    if [ ! -f "$filepath" ]; then
-        continue
-    fi
+    # Get classification
+    classification=$(classify_model "$filepath")
+    dest_dir=$(echo "$classification" | cut -d'|' -f1)
+    model_type=$(echo "$classification" | cut -d'|' -f2)
     
     filename="$(basename "$filepath")"
-    filename_lower="$(echo "$filename" | tr '[:upper:]' '[:lower:]')"
-    
-    if [[ "$filename_lower" == *"vae"* ]]; then
-        dest_dir="/ComfyUI/models/vae"
-        model_type="VAE"
-    elif [[ "$filename_lower" == *"clip"* ]] || [[ "$filename_lower" == *"t5"* ]]; then
-        dest_dir="/ComfyUI/models/clip"
-        model_type="CLIP"
-    elif [[ "$filename_lower" == *"flux"* ]] || [[ "$filename_lower" == *"unet"* ]]; then
-        dest_dir="/ComfyUI/models/unet"
-        model_type="UNET"
-    elif [[ "$filename_lower" == *"controlnet"* ]]; then
-        dest_dir="/ComfyUI/models/controlnet"
-        model_type="ControlNet"
-    else
-        dest_dir="/ComfyUI/models/checkpoints"
-        model_type="Checkpoint"
-    fi
-    
     dest_file="${dest_dir}/${filename}"
-    mkdir -p "$dest_dir"
+    
     move_or_link_file "$filepath" "$dest_file" "$model_type"
+    
+done < <(find "${DOWNLOAD_DIR}" -type f \( -name "*.safetensors" -o -name "*.ckpt" -o -name "*.pt" -o -name "*.pth" -o -name "*.bin" \) -print0)
+
+echo ""
+echo "📊 Processing Summary:"
+echo "  Total files found: ${total_files}"
+echo "  Files organized: ${moved_count}"
+
+# Handle Hugging Face cache structure specifically
+echo ""
+echo "🤗 Processing Hugging Face cached models..."
+hf_count=0
+
+# Look for HuggingFace cache directories
+for hf_dir in "${DOWNLOAD_DIR}"/models--*; do
+    if [ -d "$hf_dir" ]; then
+        echo "📂 Processing HF cache: $(basename "$hf_dir")"
+        
+        # Find all model files in this HF cache
+        while IFS= read -r -d '' hf_file; do
+            if [ ! -f "$hf_file" ]; then
+                continue
+            fi
+            
+            ((hf_count++))
+            echo "🤗 HF file: $hf_file"
+            
+            # Get classification
+            classification=$(classify_model "$hf_file")
+            dest_dir=$(echo "$classification" | cut -d'|' -f1)
+            model_type=$(echo "$classification" | cut -d'|' -f2)
+            
+            filename="$(basename "$hf_file")"
+            dest_file="${dest_dir}/${filename}"
+            
+            move_or_link_file "$hf_file" "$dest_file" "HF-${model_type}"
+            
+        done < <(find "$hf_dir" -type f \( -name "*.safetensors" -o -name "*.bin" -o -name "*.pt" -o -name "*.pth" \) -print0)
+    fi
 done
 
-# Handle Hugging Face cached models (they're in subdirectories)
-if [ -d "${DOWNLOAD_DIR}/models--black-forest-labs--FLUX.1-dev" ] || [ -d "${DOWNLOAD_DIR}/models--" ]; then
-    echo "🤗 Processing Hugging Face cached models..."
-    
-    # Find all model files in HF cache structure
-    find "${DOWNLOAD_DIR}" -type f \( -name "*.safetensors" -o -name "*.bin" -o -name "*.pt" \) | while read -r filepath; do
-        if [ ! -f "$filepath" ]; then
-            continue
-        fi
-        
-        filename="$(basename "$filepath")"
-        filename_lower="$(echo "$filename" | tr '[:upper:]' '[:lower:]')"
-        
-        # Skip if already processed above
-        if [[ "$filepath" == "${DOWNLOAD_DIR}/"*.* ]]; then
-            continue
-        fi
-        
-        # Classify HF models based on path and filename
-        if [[ "$filepath" == *"text_encoder"* ]] || [[ "$filename_lower" == *"clip"* ]] || [[ "$filename_lower" == *"t5"* ]]; then
-            dest_dir="/ComfyUI/models/clip"
-            model_type="CLIP/Text Encoder"
-        elif [[ "$filepath" == *"vae"* ]] || [[ "$filename_lower" == *"vae"* ]]; then
-            dest_dir="/ComfyUI/models/vae"
-            model_type="VAE"
-        elif [[ "$filepath" == *"transformer"* ]] || [[ "$filename_lower" == *"flux"* ]] || [[ "$filename_lower" == *"dit"* ]]; then
-            dest_dir="/ComfyUI/models/unet"
-            model_type="Flux Transformer"
-        else
-            # Default for unknown HF models
-            dest_dir="/ComfyUI/models/checkpoints"
-            model_type="HF Model"
-        fi
-        
-        dest_file="${dest_dir}/${filename}"
-        mkdir -p "$dest_dir"
-        move_or_link_file "$filepath" "$dest_file" "$model_type"
-    done
-fi
+echo "  HuggingFace files processed: ${hf_count}"
 
 # Clean up empty directories
 find "${DOWNLOAD_DIR}" -type d -empty -delete 2>/dev/null || true
 
-echo "✅ Organization complete! Moved/linked ${moved_count} model files"
-
-# Show summary of organized models
 echo ""
-echo "📊 Model Summary:"
+echo "✅ Organization complete! Total files organized: $((moved_count + hf_count))"
+
+# Show detailed summary of organized models
+echo ""
+echo "📊 Final Model Summary:"
+grand_total=0
+
 for model_dir in /ComfyUI/models/*/; do
     if [ -d "$model_dir" ]; then
         file_count=$(find "$model_dir" -maxdepth 1 -type f \( -name "*.safetensors" -o -name "*.ckpt" -o -name "*.pt" -o -name "*.pth" -o -name "*.bin" \) 2>/dev/null | wc -l)
@@ -195,10 +180,12 @@ for model_dir in /ComfyUI/models/*/; do
         
         if [ "$total_count" -gt 0 ]; then
             dir_name=$(basename "$model_dir")
+            grand_total=$((grand_total + total_count))
+            
             if [ "$link_count" -gt 0 ]; then
-                echo "  ${dir_name}: ${total_count} models (${file_count} files + ${link_count} symlinks)"
+                echo "  📁 ${dir_name}: ${total_count} models (${file_count} files + ${link_count} symlinks)"
             else
-                echo "  ${dir_name}: ${file_count} models"
+                echo "  📁 ${dir_name}: ${file_count} models"
             fi
             
             # Show first few model names for verification
@@ -211,3 +198,16 @@ for model_dir in /ComfyUI/models/*/; do
         fi
     fi
 done
+
+echo ""
+echo "🎯 TOTAL MODELS ORGANIZED: ${grand_total}"
+
+if [ "$grand_total" -eq 0 ]; then
+    echo ""
+    echo "⚠️  WARNING: No models were organized!"
+    echo "🔍 Debug information:"
+    echo "  - Download directory: ${DOWNLOAD_DIR}"
+    echo "  - Directory exists: $([ -d "${DOWNLOAD_DIR}" ] && echo "YES" || echo "NO")"
+    echo "  - Files in directory: $(find "${DOWNLOAD_DIR}" -type f | wc -l)"
+    echo "  - Model files found: $(find "${DOWNLOAD_DIR}" -type f \( -name "*.safetensors" -o -name "*.ckpt" -o -name "*.pt" -o -name "*.pth" -o -name "*.bin" \) | wc -l)"
+fi
