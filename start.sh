@@ -80,31 +80,20 @@ if [ "${FILEBROWSER:-false}" = "true" ]; then
     
     echo "🗂️  Starting FileBrowser on port 8080..."
     
-    # DEFINITIVE FIX: Initialize FileBrowser database first, then start with proper config
-    cd /workspace
+    # Use Hearmeman24's proven approach - database in workspace, not tmp
+    NETWORK_VOLUME="/workspace"
     
-    # Initialize FileBrowser with explicit configuration
-    filebrowser config init \
-        --database /tmp/filebrowser.db \
-        --root /workspace \
-        --port 8080 \
-        --address 0.0.0.0
+    # Initialize FileBrowser database in workspace (persistent location)
+    filebrowser -d "${NETWORK_VOLUME}/filebrowser.db" config init
     
-    # Create user
-    filebrowser users add "${FB_USERNAME}" "${FB_PASSWORD}" \
-        --database /tmp/filebrowser.db \
-        --perm.admin
+    # Create admin user with proper permissions
+    filebrowser -d "${NETWORK_VOLUME}/filebrowser.db" users add "${FB_USERNAME}" "${FB_PASSWORD}" --perm.admin
     
-    # Start FileBrowser with proper configuration
-    filebrowser \
-        --database /tmp/filebrowser.db \
-        --root /workspace \
-        --port 8080 \
-        --address 0.0.0.0 \
-        --log /tmp/filebrowser.log &
+    # Start FileBrowser with workspace root and persistent database
+    filebrowser -d "${NETWORK_VOLUME}/filebrowser.db" -r "${NETWORK_VOLUME}" -a 0.0.0.0 -p 8080 > "${NETWORK_VOLUME}/filebrowser.log" 2>&1 &
     
     echo "📁 FileBrowser: http://0.0.0.0:8080 (${FB_USERNAME}:${FB_PASSWORD})"
-    echo "📂 Root directory: /workspace (FULL ACCESS CONFIRMED)"
+    echo "📂 Root directory: ${NETWORK_VOLUME} (FULL ACCESS CONFIRMED)"
 fi
 
 # ─── 4️⃣ CivitAI Downloads ──────────────────────────────────────────────────
@@ -180,51 +169,39 @@ echo "🔧 Organizing all downloaded models..."
 echo "🔍 Debug: Download directory contents before organization:"
 ls -la "${DOWNLOAD_DIR}" || echo "⚠️  Could not list download directory"
 
-# NEW: Flatten the directory structure. HuggingFace downloads create subdirectories.
-# This moves all model files from subdirectories into the main download directory
-# so the organization script can find them.
+# CRITICAL FIX: Flatten the HuggingFace nested directory structure
+# HuggingFace creates subdirectories like "models--black-forest-labs--FLUX.1-dev"
 echo "📂 Flattening download directory..."
-find "${DOWNLOAD_DIR}" -mindepth 2 -type f \( -name "*.safetensors" -o -name "*.bin" -o -name "*.pth" -o -name "*.ckpt" \) -exec mv -t "${DOWNLOAD_DIR}" {} +
+
+# First, find and move all model files from nested subdirectories
+find "${DOWNLOAD_DIR}" -mindepth 2 -type f \( -name "*.safetensors" -o -name "*.bin" -o -name "*.pth" -o -name "*.ckpt" \) -print0 | while IFS= read -r -d '' file; do
+    filename=$(basename "$file")
+    if [ ! -f "${DOWNLOAD_DIR}/${filename}" ]; then
+        echo "📦 Moving: $file -> ${DOWNLOAD_DIR}/${filename}"
+        mv "$file" "${DOWNLOAD_DIR}/${filename}" || echo "⚠️  Failed to move $file"
+    else
+        echo "⚠️  File already exists: ${filename}, skipping"
+    fi
+done
 
 echo "🔍 Debug: Download directory contents after flattening:"
 ls -la "${DOWNLOAD_DIR}" || echo "⚠️  Could not list download directory"
 
-# Run the fixed organization script
+# Run the organization script on the flattened directory
 organise_downloads.sh "${DOWNLOAD_DIR}"
 
 
 # ─── 6️⃣ JupyterLab with FIXED Dependencies ──────────────────────────────────
-if command -v jupyter >/dev/null 2>&1; then
+if command -v jupyter-lab >/dev/null 2>&1; then
     echo "🔬 Starting JupyterLab on port 8888..."
     JUPYTER_TOKEN="${JUPYTER_TOKEN:-}"
     
     if [ -z "$JUPYTER_TOKEN" ] || [ "$JUPYTER_TOKEN" = "*tokenOrLeaveBlank*" ]; then
-        # No token for RunPod security - FIXED startup parameters
-        jupyter lab \
-            --ip=0.0.0.0 \
-            --port=8888 \
-            --no-browser \
-            --allow-root \
-            --ServerApp.token='' \
-            --ServerApp.password='' \
-            --ServerApp.allow_origin='*' \
-            --ServerApp.allow_remote_access=True \
-            --ServerApp.disable_check_xsrf=True \
-            --notebook-dir=/workspace \
-            --LabApp.check_for_updates_frequency=0 > /tmp/jupyter.log 2>&1 &
+        # Use Hearmeman24's proven approach with NotebookApp parameters
+        jupyter-lab --ip=0.0.0.0 --allow-root --no-browser --NotebookApp.token='' --NotebookApp.password='' --ServerApp.allow_origin='*' --ServerApp.allow_credentials=True --notebook-dir=/workspace > /workspace/jupyter.log 2>&1 &
         echo "🔬 JupyterLab: http://0.0.0.0:8888 (no token required)"
     else
-        jupyter lab \
-            --ip=0.0.0.0 \
-            --port=8888 \
-            --no-browser \
-            --allow-root \
-            --ServerApp.token="$JUPYTER_TOKEN" \
-            --ServerApp.allow_origin='*' \
-            --ServerApp.allow_remote_access=True \
-            --ServerApp.disable_check_xsrf=True \
-            --notebook-dir=/workspace \
-            --LabApp.check_for_updates_frequency=0 > /tmp/jupyter.log 2>&1 &
+        jupyter-lab --ip=0.0.0.0 --allow-root --no-browser --NotebookApp.token="$JUPYTER_TOKEN" --NotebookApp.password='' --ServerApp.allow_origin='*' --ServerApp.allow_credentials=True --notebook-dir=/workspace > /workspace/jupyter.log 2>&1 &
         echo "🔬 JupyterLab: http://0.0.0.0:8888 (token: $JUPYTER_TOKEN)"
     fi
 else
