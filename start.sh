@@ -180,8 +180,18 @@ echo "🔧 Organizing all downloaded models..."
 echo "🔍 Debug: Download directory contents before organization:"
 ls -la "${DOWNLOAD_DIR}" || echo "⚠️  Could not list download directory"
 
+# NEW: Flatten the directory structure. HuggingFace downloads create subdirectories.
+# This moves all model files from subdirectories into the main download directory
+# so the organization script can find them.
+echo "📂 Flattening download directory..."
+find "${DOWNLOAD_DIR}" -mindepth 2 -type f \( -name "*.safetensors" -o -name "*.bin" -o -name "*.pth" -o -name "*.ckpt" \) -exec mv -t "${DOWNLOAD_DIR}" {} +
+
+echo "🔍 Debug: Download directory contents after flattening:"
+ls -la "${DOWNLOAD_DIR}" || echo "⚠️  Could not list download directory"
+
 # Run the fixed organization script
 organise_downloads.sh "${DOWNLOAD_DIR}"
+
 
 # ─── 6️⃣ JupyterLab with FIXED Dependencies ──────────────────────────────────
 if command -v jupyter >/dev/null 2>&1; then
@@ -223,13 +233,13 @@ fi
 
 # ─── 7️⃣ Final Verification & Launch ──────────────────────────────────────
 echo "🔍 Verifying final environment..."
-python3 -c "
+python3 - <<'EOF'
 import torch
 print(f'✅ PyTorch {torch.__version__} ready')
 if torch.cuda.is_available():
     print(f'✅ CUDA {torch.version.cuda} detected')
     print(f'✅ GPU: {torch.cuda.get_device_name(0)}')
-    print(f'✅ GPU Memory: {torch.cuda.get_device_properties(0).total_memory // 1024**3}GB')
+    print(f'✅ GPU Memory: {torch.cuda.get_device_properties(0).total_memory // 1024**3} GB')
     # RTX 5090 handling with NVIDIA container
     try:
         device_props = torch.cuda.get_device_properties(0)
@@ -245,9 +255,10 @@ if torch.cuda.is_available():
         else:
             print('✅ GPU architecture supported')
     except Exception as e:
-        print(f"❌ GPU verification failed: {e}")
+        print(f'❌ GPU verification failed: {e}')
 else:
-    print("⚠️  CUDA not available, running in CPU mode.")
+    print('⚠️  CUDA not available, running in CPU mode.')
+EOF
 
 # ─── 8️⃣ Launch ComfyUI ─────────────────────────────────────────────────────
 echo "✅ All services started. Launching ComfyUI..."

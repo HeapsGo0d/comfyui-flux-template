@@ -53,7 +53,7 @@ RUN git clone https://github.com/comfyanonymous/ComfyUI.git /ComfyUI && \
     (cd /ComfyUI && git checkout 78672d0ee6d20d8269f324474643e5cc00f1c348)
 
 RUN git clone https://github.com/Hearmeman24/CivitAI_Downloader.git /CivitAI_Downloader && \
-    (cd /CivitAI_Downloader && git checkout 1f3e786196434455828450702157797746522c71)
+    (cd /CivitAI_Downloader && git checkout 11fd5579d74dd759a2c7e16698641d144cf4f7ef)
 
 # Install ComfyUI's specific dependencies
 WORKDIR /ComfyUI

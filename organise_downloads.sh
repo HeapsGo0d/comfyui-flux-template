@@ -63,12 +63,6 @@ classify_model() {
     path_lower=$(echo "$1" | tr '[:upper:]' '[:lower:]')
 
     case "$path_lower" in
-        *vae*)
-            echo "/ComfyUI/models/vae|VAE" ;;
-        *flux*|*unet*|*dit*|*transformer*)
-            echo "/ComfyUI/models/unet|UNET/Flux" ;;
-        *clip*|*t5*|*text_encoder*)
-            echo "/ComfyUI/models/clip|CLIP" ;;
         *lora*|*lycoris*)
             echo "/ComfyUI/models/loras|LoRA" ;;
         *embedding*|*textual_inversion*|*ti_*)
@@ -77,6 +71,12 @@ classify_model() {
             echo "/ComfyUI/models/controlnet|ControlNet" ;;
         *upscaler*|*esrgan*|*realesrgan*)
             echo "/ComfyUI/models/upscale_models|Upscaler" ;;
+        *vae*)
+            echo "/ComfyUI/models/vae|VAE" ;;
+        *clip*|*t5*|*text_encoder*)
+            echo "/ComfyUI/models/clip|CLIP" ;;
+        *flux*|*unet*|*dit*|*transformer*)
+            echo "/ComfyUI/models/unet|UNET/Flux" ;;
         *)
             # Default to checkpoints for unknown types
             echo "/ComfyUI/models/checkpoints|Checkpoint" ;;
@@ -106,7 +106,7 @@ while IFS= read -r -d '' filepath; do
     
     move_or_link_file "$filepath" "$dest_file" "$model_type"
     
-done < <(find "${DOWNLOAD_DIR}" -type f \( -name "*.safetensors" -o -name "*.ckpt" -o -name "*.pt" -o -name "*.pth" -o -name "*.bin" \) -print0)
+done < <(find "${DOWNLOAD_DIR}" -maxdepth 1 -type f \( -name "*.safetensors" -o -name "*.ckpt" -o -name "*.pt" -o -name "*.pth" -o -name "*.bin" \) -print0)
 
 echo ""
 echo "📊 Processing Summary:"
