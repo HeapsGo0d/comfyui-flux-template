@@ -63,7 +63,7 @@ check_service_health() {
     
     log "INFO" "Checking health of ${service_name} on port ${port}..."
     
-    while [ $attempt -lt $max_attempts ]; then
+    while [ $attempt -lt $max_attempts ]; do
         if curl -s --connect-timeout 2 "http://localhost:${port}" >/dev/null 2>&1; then
             log "INFO" "${service_name} is healthy on port ${port}"
             return 0
