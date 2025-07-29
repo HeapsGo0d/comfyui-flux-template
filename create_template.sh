@@ -42,13 +42,6 @@ if [[ -z "$TEMPLATE_DESC" ]]; then
   TEMPLATE_DESC="ComfyUI-Flux template for RunPod"
 fi
 
-# Security validation
-if [[ ! "$README_CONTENT" =~ "Security Features" ]]; then
-  echo "⚠️ Warning: README does not contain security documentation. This is recommended." >&2
-fi
-
-echo "✅ Pre-flight checks passed"
-
 # ─── Template Definition ────────────────────────────────────────────────────
 # Define the multi-line readme content.
 # Updated for accuracy based on the Dockerfile.
@@ -139,6 +132,13 @@ Downloaded models are intelligently analyzed and organized into:
 EOF
 )
 
+# Security validation
+if [[ ! "$README_CONTENT" =~ "Security Features" ]]; then
+  echo "⚠️ Warning: README does not contain security documentation. This is recommended." >&2
+fi
+
+echo "✅ Pre-flight checks passed"
+
 # Define the GraphQL mutation query.
 GRAPHQL_QUERY=$(cat <<'EOF'
 mutation saveTemplate($input: SaveTemplateInput!) {
@@ -162,7 +162,6 @@ EOF
 INPUT_VARIABLES=$(jq -n \
   --arg name "$TEMPLATE_NAME" \
   --arg imageName "$IMAGE_NAME" \
-  --arg description "$TEMPLATE_DESC" \
   --argjson cDisk 100 \
   --argjson vGb 0 \
   --arg vPath "/workspace" \
@@ -172,7 +171,6 @@ INPUT_VARIABLES=$(jq -n \
   '{
     "input": {
       name: $name,
-      description: $description,
       imageName: $imageName,
       containerDiskInGb: $cDisk,
       volumeInGb: $vGb,
