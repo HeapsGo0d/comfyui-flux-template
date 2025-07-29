@@ -22,6 +22,7 @@ RUN apt-get update && \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/* \
     && mkdir -p /ComfyUI/models/{checkpoints,loras,vae,clip,unet,controlnet,embeddings,upscale_models} \
+    && mkdir -p /runpod-volume \
     && chown -R sduser:sduser /ComfyUI /runpod-volume /workspace \
     && chmod 755 /runpod-volume /workspace \
     && echo 'HISTSIZE=0' >> /home/sduser/.bashrc \
@@ -57,10 +58,10 @@ RUN curl -fsSL "https://github.com/filebrowser/filebrowser/releases/download/v2.
 # Clone repositories (without --depth 1 to avoid git describe issues)
 # Pinning to a specific commit ensures reproducible builds
 # Updated commit hash to a recent, valid one.
-RUN git clone https://github.com/comfyanonymous/ComfyUI.git /ComfyUI && \
+RUN rm -rf /ComfyUI && git clone https://github.com/comfyanonymous/ComfyUI.git /ComfyUI && \
     (cd /ComfyUI && git checkout 78672d0ee6d20d8269f324474643e5cc00f1c348)
 
-RUN git clone https://github.com/Hearmeman24/CivitAI_Downloader.git /CivitAI_Downloader && \
+RUN rm -rf /CivitAI_Downloader && git clone https://github.com/Hearmeman24/CivitAI_Downloader.git /CivitAI_Downloader && \
     (cd /CivitAI_Downloader && git checkout 11fd5579d74dd759a2c7e16698641d144cf4f7ef)
 
 # Install ComfyUI's specific dependencies
