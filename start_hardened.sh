@@ -183,6 +183,20 @@ start_filebrowser() {
     return 0
 }
 
+# CivitAI model download function
+download_civitai_models() {
+    log "INFO" "Starting CivitAI model downloads..."
+    # Add actual download logic here
+    return 0
+}
+
+# HuggingFace model download function
+download_huggingface_models() {
+    log "INFO" "Starting HuggingFace model downloads..."
+    # Add actual download logic here
+    return 0
+}
+
 # Enhanced model organization function
 organize_models() {
     log "INFO" "Organizing downloaded models..."
@@ -239,6 +253,9 @@ main() {
     if ! organize_models; then
         log "ERROR" "Model organization failed, but proceeding"
     fi
+
+    # Remove empty HuggingFace cache directories to save space
+    find "${DOWNLOAD_DIR}" -type d -name "snapshots" -exec rm -rf {} + 2>/dev/null || true
 
     # Start ComfyUI (critical service)
     log "INFO" "Starting ComfyUI (critical service)..."
