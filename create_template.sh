@@ -22,19 +22,19 @@ fi
 README_CONTENT=$(cat <<'EOF'
 ## ComfyUI-Flux Template (RTX 5090 Ready)
 
-This template provides a robust environment for running ComfyUI with FLUX models, pre-configured with FileBrowser and JupyterLab for a complete workflow.
+This template provides a robust environment for running ComfyUI with FLUX models, pre-configured with FileBrowser for complete workflow management.
 
 ### Key Features:
 - **Future-Proof GPU Support**: Built on NVIDIA's official PyTorch container (`24.04-py3`) for compatibility with the latest GPUs, including the RTX 40-series and readiness for future architectures like Blackwell (RTX 50-series).
 - **Smart Model Organization**: An intelligent script automatically organizes downloaded models from any source (CivitAI, Hugging Face, direct uploads) into the correct ComfyUI directories.
-- **Integrated Tools**: Comes with FileBrowser for easy file management across the entire workspace and JupyterLab for development and experimentation.
+- **Integrated Tools**: Comes with FileBrowser for easy file management across the entire workspace.
 - **Maximum Security & Privacy**: A comprehensive cleanup script runs on exit to remove all user data, logs, caches, and command history, ensuring no trace is left behind.
 - **Optimized Performance**: Leverages the latest versions of PyTorch and xformers for optimal performance.
+- **Debugging Support**: DEBUG_MODE flag enables verbose output for troubleshooting.
 
 ### Services:
 - **ComfyUI**: Port `7860` (Main UI)
 - **FileBrowser**: Port `8080` (Full `/workspace` access)
-- **JupyterLab**: Port `8888` (Development environment)
 
 ### 💾 Storage Configuration:
 - **Default**: Runs in ephemeral mode using the container disk (100 GB). **All data will be wiped when the pod stops.**
@@ -51,7 +51,7 @@ This template provides a robust environment for running ComfyUI with FLUX models
 - `VAE_IDS_TO_DOWNLOAD`: Comma-separated list of VAE model IDs.
 - `HUGGINGFACE_TOKEN`: Your Hugging Face API token.
 - `HUGGINGFACE_REPOS`: Comma-separated list of Hugging Face repos to download (default: `black-forest-labs/FLUX.1-dev`).
-- `JUPYTER_TOKEN`: Custom JupyterLab token (optional; defaults to none for RunPod).
+- `DEBUG_MODE`: Set to "true" to enable verbose troubleshooting output (default: false).
 
 ### 🔧 Model Organization:
 Models are automatically organized into:
@@ -103,10 +103,10 @@ INPUT_VARIABLES=$(jq -n \
   --arg name "comfyui-flux-rtx5090" \
   --arg imageName "$IMAGE_NAME" \
   --argjson cDisk 100 \
-  --argjson vGb 30 \
+  --argjson vGb 0 \
   --arg vPath "/workspace" \
   --arg dArgs "" \
-  --arg ports "7860/http,8080/http,8888/http" \
+  --arg ports "7860/http,8080/http" \
   --arg readme "$README_CONTENT" \
   '{
     "input": {
@@ -129,7 +129,7 @@ INPUT_VARIABLES=$(jq -n \
         { "key": "VAE_IDS_TO_DOWNLOAD", "value": "*update*" },
         { "key": "HUGGINGFACE_TOKEN", "value": "{{ RUNPOD_SECRET_huggingface.co }}" },
         { "key": "HUGGINGFACE_REPOS", "value": "black-forest-labs/FLUX.1-dev" },
-        { "key": "JUPYTER_TOKEN", "value": "*tokenOrLeaveBlank*" }
+        { "key": "DEBUG_MODE", "value": "false" }
       ]
     }
   }')

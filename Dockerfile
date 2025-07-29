@@ -40,10 +40,7 @@ RUN pip install --no-cache-dir \
     comfyui-manager \
     joblib \
     # Install latest xformers compatible with NVIDIA PyTorch
-    xformers \
-    # Install JupyterLab extensions
-    jupyterlab-git \
-    jupyterlab_widgets
+    xformers
 
 # Verify PyTorch RTX 5090 compatibility
 RUN python3 -c "import torch; print(f'✅ PyTorch {torch.__version__} installed'); print(f'✅ CUDA available: {torch.cuda.is_available()}'); print(f'✅ GPU detected: {torch.cuda.get_device_name(0) if torch.cuda.is_available() else \"No GPU\"}')"
@@ -92,7 +89,7 @@ RUN echo 'HISTSIZE=0' >> /home/sduser/.bashrc && \
 USER sduser
 
 # Expose all necessary ports
-EXPOSE 7860 8080 8888
+EXPOSE 7860 8080
 
 # Health check - Port updated to 7860 to match the running application
 HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
