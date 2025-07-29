@@ -17,7 +17,7 @@ RUN apt-get update && \
         build-essential libglib2.0-0 \
         libjpeg-dev libpng-dev libsentencepiece-dev \
         libsm6 libxext6 libxrender-dev libgomp1 \
-        nodejs npm parallel \
+        nodejs npm parallel bc \
     && npm install -g yarn \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/* \
@@ -65,14 +65,16 @@ RUN rm -rf /CivitAI_Downloader && git clone https://github.com/Hearmeman24/Civit
 WORKDIR /ComfyUI
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy scripts and make them executable
-# Copy scripts with explicit path verification
-COPY --chmod=+x start_hardened.sh organise_downloads.sh /usr/local/bin/
+# Copy ALL required scripts and make them executable
+COPY --chmod=+x start_hardened.sh variable_parser.sh organise_downloads.sh /usr/local/bin/
+
+# Verify all scripts are present and executable
 RUN { \
     echo "Verifying script permissions..."; \
     [ -x "/usr/local/bin/start_hardened.sh" ] || { echo "Error: start_hardened.sh not executable"; exit 1; }; \
+    [ -f "/usr/local/bin/variable_parser.sh" ] || { echo "Error: variable_parser.sh not found"; exit 1; }; \
     [ -x "/usr/local/bin/organise_downloads.sh" ] || { echo "Error: organise_downloads.sh not executable"; exit 1; }; \
-    echo "✅ Scripts verified"; \
+    echo "✅ All scripts verified"; \
 }
 
 # Create directories and set permissions for the non-root user
