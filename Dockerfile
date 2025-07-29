@@ -69,8 +69,14 @@ WORKDIR /ComfyUI
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy scripts and make them executable
-COPY start.sh organise_downloads.sh /usr/local/bin/
-RUN chmod +x /usr/local/bin/start.sh /usr/local/bin/organise_downloads.sh
+# Copy scripts with explicit path verification
+COPY --chmod=+x start_hardened.sh organise_downloads.sh /usr/local/bin/
+RUN { \
+    echo "Verifying script permissions..."; \
+    [ -x "/usr/local/bin/start_hardened.sh" ] || { echo "Error: start_hardened.sh not executable"; exit 1; }; \
+    [ -x "/usr/local/bin/organise_downloads.sh" ] || { echo "Error: organise_downloads.sh not executable"; exit 1; }; \
+    echo "✅ Scripts verified"; \
+}
 
 # Create directories and set permissions for the non-root user
 RUN mkdir -p /runpod-volume /workspace/downloads \
@@ -92,4 +98,4 @@ EXPOSE 7860 8080 8888
 HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
   CMD curl -f http://localhost:7860/queue >/dev/null || exit 1
 
-ENTRYPOINT ["start.sh"]
+ENTRYPOINT ["start_hardened.sh"]

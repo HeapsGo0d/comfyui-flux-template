@@ -130,6 +130,9 @@ check_service_health() {
 exit_clean() {
     log_security "Starting comprehensive security cleanup..."
     
+    # Clean up filebrowser.db if it exists
+    rm -f "/workspace/filebrowser.db" 2>/dev/null || true
+    
     # 1. Terminate all tracked services gracefully
     for service in "${!SERVICE_PIDS[@]}"; do
         local pid="${SERVICE_PIDS[$service]}"
@@ -545,8 +548,8 @@ organize_models() {
     fi
     
     # Check if organise_downloads.sh exists and is executable
-    if [ ! -x "./organise_downloads.sh" ]; then
-        log_error "organise_downloads.sh not found or not executable"
+    if [ ! -x "/usr/local/bin/organise_downloads.sh" ]; then
+        log_error "/usr/local/bin/organise_downloads.sh not found or not executable"
         return 1
     fi
     
@@ -581,7 +584,7 @@ organize_models() {
     ls -la "$DOWNLOAD_DIR" 2>/dev/null || log_error "Could not list download directory"
     
     # Run organization script with error handling
-    if ! ./organise_downloads.sh "$DOWNLOAD_DIR"; then
+    if ! /usr/local/bin/organise_downloads.sh "$DOWNLOAD_DIR"; then
         log_error "Model organization failed"
         return 1
     fi
