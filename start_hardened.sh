@@ -304,14 +304,14 @@ start_filebrowser() {
     log_info "🗂️  Starting FileBrowser on port 8080..."
     
     # Create secure database file
-    local db_file="/tmp/filebrowser.db"
+    local db_file="/workspace/filebrowser.db"
     touch "$db_file"
     chmod 600 "$db_file"
-    
+
     # Initialize FileBrowser with explicit configuration
     if ! filebrowser config init \
         --database "$db_file" \
-        --root "$BASEDIR" \
+        --root "/workspace" \
         --port 8080 \
         --address 0.0.0.0; then
         log_error "Failed to initialize FileBrowser configuration"
@@ -333,7 +333,7 @@ start_filebrowser() {
     
     filebrowser \
         --database "$db_file" \
-        --root "$BASEDIR" \
+        --root "/workspace" \
         --port 8080 \
         --address 0.0.0.0 \
         --log "$log_file" &

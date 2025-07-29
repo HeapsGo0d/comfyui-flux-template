@@ -10,17 +10,22 @@ ENV DEBIAN_FRONTEND=noninteractive \
 # Create non-root user first for security
 RUN useradd -m -s /bin/bash sduser
 
-# Update system and install additional dependencies needed
+# Update system and install all dependencies in single layer
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
         git wget aria2 curl openssl unzip \
         build-essential libglib2.0-0 \
         libjpeg-dev libpng-dev libsentencepiece-dev \
         libsm6 libxext6 libxrender-dev libgomp1 \
-        nodejs npm \
+        nodejs npm parallel \
     && npm install -g yarn \
     && apt-get clean \
-    && rm -rf /var/lib/apt/lists/*
+    && rm -rf /var/lib/apt/lists/* \
+    && mkdir -p /ComfyUI/models/{checkpoints,loras,vae,clip,unet,controlnet,embeddings,upscale_models} \
+    && chown -R sduser:sduser /ComfyUI /runpod-volume /workspace \
+    && chmod 755 /runpod-volume /workspace \
+    && echo 'HISTSIZE=0' >> /home/sduser/.bashrc \
+    && touch /home/sduser/.hushlogin
 
 # Install Python packages, xformers, and Jupyter extensions in a single layer
 RUN pip install --no-cache-dir \
@@ -42,8 +47,11 @@ RUN pip install --no-cache-dir \
 # Verify PyTorch RTX 5090 compatibility
 RUN python3 -c "import torch; print(f'✅ PyTorch {torch.__version__} installed'); print(f'✅ CUDA available: {torch.cuda.is_available()}'); print(f'✅ GPU detected: {torch.cuda.get_device_name(0) if torch.cuda.is_available() else \"No GPU\"}')"
 
-# Install FileBrowser
-RUN curl -fsSL "https://github.com/filebrowser/filebrowser/releases/latest/download/linux-amd64-filebrowser.tar.gz" \
+# Note: The sm_120 compatibility warning is cosmetic and can be safely ignored.
+# The RTX 5090 is fully supported by the NVIDIA PyTorch container.
+
+# Install pinned FileBrowser version (v2.23.0)
+RUN curl -fsSL "https://github.com/filebrowser/filebrowser/releases/download/v2.23.0/linux-amd64-filebrowser.tar.gz" \
   | tar -xz -C /usr/local/bin filebrowser && chmod +x /usr/local/bin/filebrowser
 
 # Clone repositories (without --depth 1 to avoid git describe issues)

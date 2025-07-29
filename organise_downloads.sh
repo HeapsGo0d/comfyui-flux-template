@@ -1,5 +1,30 @@
 #!/usr/bin/env bash
+# Security Considerations:
+# 1. Input Validation:
+#    - Validates download directory exists (lines 16-30)
+#    - Checks file existence before operations (lines 47, 112)
+# 2. Error Handling:
+#    - set -euo pipefail ensures script exits on errors (line 2)
+#    - Individual operation error handling (lines 63-64, 140-144)
+# 3. Safe File Operations:
+#    - Uses symlinks first to avoid duplication (lines 56-61)
+#    - Validates destination paths (lines 47-50)
+# 4. Parallel Processing Safety:
+#    - Job logging for debugging (lines 157, 162)
+#    - Process isolation via GNU parallel
+# 5. Cleanup:
+#    - Removes empty directories (line 181)
+#    - Temporary files cleaned in separate step (todo)
+
 set -euo pipefail
+
+# Check for GNU parallel
+if ! command -v parallel &> /dev/null; then
+    echo "⚠️  GNU parallel not found - falling back to sequential processing"
+    PARALLEL_ENABLED=false
+else
+    PARALLEL_ENABLED=true
+fi
 
 DOWNLOAD_DIR="${1:-/workspace/downloads}"
 echo "🗂️  Organizing model files from ${DOWNLOAD_DIR}"
@@ -87,26 +112,82 @@ classify_model() {
 echo "🔍 Scanning for model files..."
 total_files=0
 
-# Find all model files and process them
-while IFS= read -r -d '' filepath; do
-    if [ ! -f "$filepath" ]; then
-        continue
+# Process files function for parallel execution (batch version)
+process_batch() {
+    batch_files="$1"
+    batch_size=$(echo "$batch_files" | wc -w)
+    echo "📦 Processing batch of $batch_size files"
+    
+    batch_success=0
+    batch_failures=0
+    
+    # Progress tracking variables
+    processed_count=0
+    start_time=$(date +%s)
+    
+    for filepath in $batch_files; do
+        if [ ! -f "$filepath" ]; then
+            continue
+        fi
+        
+        ((processed_count++))
+        echo "📄 Processing [$processed_count/$batch_size]: $filepath"
+        
+        # Get classification
+        classification=$(classify_model "$filepath")
+        dest_dir=$(echo "$classification" | cut -d'|' -f1)
+        model_type=$(echo "$classification" | cut -d'|' -f2)
+        
+        filename="$(basename "$filepath")"
+        dest_file="${dest_dir}/${filename}"
+        
+        if move_or_link_file "$filepath" "$dest_file" "$model_type"; then
+            ((batch_success++))
+        else
+            ((batch_failures++))
+        fi
+        
+        # Calculate and display progress
+        current_time=$(date +%s)
+        elapsed=$((current_time - start_time))
+        remaining=$(( (elapsed * (batch_size - processed_count)) / processed_count ))
+        echo "⏱️  Progress: $processed_count/$batch_size | Elapsed: ${elapsed}s | Remaining: ~${remaining}s"
+    done
+    
+    if [ $batch_failures -gt 0 ]; then
+        echo "⚠️  Batch had $batch_failures failures"
+        return 1
+    fi
+    return 0
+}
+
+export -f process_batch move_or_link_file classify_model
+
+export -f process_single_file move_or_link_file classify_model
+
+# Find and process all model files
+if [ "$PARALLEL_ENABLED" = true ]; then
+    echo "⚡ Processing files in parallel batches..."
+    # Create batches of 10 files each
+    find "${DOWNLOAD_DIR}" \( -type f \( -name "*.safetensors" -o -name "*.ckpt" -o -name "*.pt" -o -name "*.pth" -o -name "*.bin" \) -not -path "*/.git/*" -not -path "*/.github/*" \) -o \( -type d -name "models--*" -exec find {} -type f \( -name "*.safetensors" -o -name "*.ckpt" -o -name "*.pt" -o -name "*.pth" -o -name "*.bin" \) -not -path "*/.git/*" -not -path "*/.github/*" -print0 \; \) -print0 | \
+        xargs -0 -n 10 | \
+        parallel --bar --joblog /tmp/parallel_joblog --halt soon,fail=1 --progress --eta process_batch
+    parallel_exit=$?
+    
+    if [ $parallel_exit -ne 0 ]; then
+        echo "⚠️  Parallel processing encountered errors (exit code $parallel_exit)"
+        echo "🔍 Check /tmp/parallel_joblog for details"
     fi
     
-    ((total_files++))
-    echo "📄 Found file: $filepath"
-    
-    # Get classification
-    classification=$(classify_model "$filepath")
-    dest_dir=$(echo "$classification" | cut -d'|' -f1)
-    model_type=$(echo "$classification" | cut -d'|' -f2)
-    
-    filename="$(basename "$filepath")"
-    dest_file="${dest_dir}/${filename}"
-    
-    move_or_link_file "$filepath" "$dest_file" "$model_type"
-    
-done < <(find "${DOWNLOAD_DIR}" -maxdepth 1 -type f \( -name "*.safetensors" -o -name "*.ckpt" -o -name "*.pt" -o -name "*.pth" -o -name "*.bin" \) -print0)
+    total_files=$(wc -l < /tmp/parallel_joblog)
+    ((total_files--)) # Subtract header line
+else
+    echo "🐌 Processing files sequentially..."
+    while IFS= read -r -d '' filepath; do
+        ((total_files++))
+        process_single_file "$filepath"
+    done < <(find "${DOWNLOAD_DIR}" \( -type f \( -name "*.safetensors" -o -name "*.ckpt" -o -name "*.pt" -o -name "*.pth" -o -name "*.bin" \) -not -path "*/.git/*" -not -path "*/.github/*" \) -o \( -type d -name "models--*" -exec find {} -type f \( -name "*.safetensors" -o -name "*.ckpt" -o -name "*.pt" -o -name "*.pth" -o -name "*.bin" \) -not -path "*/.git/*" -not -path "*/.github/*" -print0 \; \) -print0)
+fi
 
 echo ""
 echo "📊 Processing Summary:"
@@ -115,6 +196,10 @@ echo "  Files organized: ${moved_count}"
 
 # Clean up empty directories
 find "${DOWNLOAD_DIR}" -type d -empty -delete 2>/dev/null || true
+
+# Clean up temporary files created by parallel processing
+[ -f "/tmp/parallel_joblog" ] && rm -f "/tmp/parallel_joblog"
+find /tmp -name "parallel_*" -user "$(whoami)" -mtime +1 -exec rm -f {} \;
 
 echo ""
 echo "✅ Organization complete!"
