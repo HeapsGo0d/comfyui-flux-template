@@ -27,6 +27,7 @@ declare -A SERVICE_CRITICAL=(
     ["filebrowser"]="false"
     ["comfyui"]="true"
 )
+declare -a CHILD_PIDS=()
 
 # Security: Create secure log file
 touch "$LOG_FILE"
@@ -77,30 +78,109 @@ check_service_health() {
     return 1
 }
 
-# Optimized FileBrowser startup (simplified)
+# Child process cleanup on exit
+cleanup_and_exit() {
+    local exit_code="${1:-0}"
+    log "INFO" "Cleaning up child processes before exit..."
+    
+    # Kill all registered child processes
+    for service in "${!SERVICE_PIDS[@]}"; do
+        local pid="${SERVICE_PIDS[$service]}"
+        if ps -p "$pid" >/dev/null 2>&1; then
+            log "INFO" "Terminating $service (PID: $pid)"
+            kill -TERM "$pid" 2>/dev/null || kill -KILL "$pid" 2>/dev/null
+        fi
+    done
+    
+    log "INFO" "Exiting with code $exit_code"
+    exit "$exit_code"
+}
+
+# Set up trap for graceful termination
+trap 'cleanup_and_exit' INT TERM
+
+# Optimized FileBrowser startup with background process management
 start_filebrowser() {
     local fb_username="${FB_USERNAME:-admin}"
     local fb_password="${FB_PASSWORD:-$(generate_secure_password)}"
+    local fb_log_file="/tmp/filebrowser.log"
+    local fb_port=8080
+    local health_check_timeout=15  # seconds
     
-    log "INFO" "Starting FileBrowser on port 8080..."
+    log "INFO" "Starting FileBrowser on port ${fb_port}..."
     
     # Initialize with secure settings
     filebrowser config init \
         --database /tmp/filebrowser.db \
         --root "$BASEDIR" \
-        --port 8080 \
+        --port "$fb_port" \
         --address 0.0.0.0
     
     filebrowser users add "$fb_username" "$fb_password" \
         --database /tmp/filebrowser.db \
         --perm.admin
     
-    # Start service
-    exec filebrowser \
+    # Start service in background with dedicated log file
+    filebrowser \
         --database /tmp/filebrowser.db \
         --root "$BASEDIR" \
-        --port 8080 \
-        --address 0.0.0.0
+        --port "$fb_port" \
+        --address 0.0.0.0 > "$fb_log_file" 2>&1 &
+    
+    # Capture actual PID
+    local filebrowser_pid=$!
+    
+    # Add to child processes array for proper supervision
+    CHILD_PIDS+=("$filebrowser_pid")
+    
+    log "INFO" "FileBrowser process started with PID: $filebrowser_pid"
+    
+    # Perform health check with timeout
+    local start_time=$(date +%s)
+    local end_time=$((start_time + health_check_timeout))
+    local current_time
+    local healthy=false
+    
+    log "INFO" "Waiting up to ${health_check_timeout}s for FileBrowser to become available..."
+    
+    while [ "$(date +%s)" -lt "$end_time" ]; do
+        # Check if process is still running
+        if ! ps -p "$filebrowser_pid" >/dev/null 2>&1; then
+            log "ERROR" "FileBrowser process died unexpectedly. Check logs at $fb_log_file"
+            return 1
+        fi
+        
+        # Check if service is responding
+        if curl -s --connect-timeout 2 "http://localhost:${fb_port}" >/dev/null 2>&1; then
+            log "INFO" "FileBrowser is healthy on port ${fb_port}"
+            healthy=true
+            break
+        fi
+        
+        sleep 1
+    done
+    
+    if [ "$healthy" = false ]; then
+        log "ERROR" "FileBrowser failed to start within ${health_check_timeout} seconds"
+        log "ERROR" "Last 10 lines of log file:"
+        tail -n 10 "$fb_log_file" | while read -r line; do
+            log "ERROR" "FileBrowser Log: $line"
+        done
+        
+        # Kill the filebrowser process if it's still running
+        if ps -p "$filebrowser_pid" >/dev/null 2>&1; then
+            kill -TERM "$filebrowser_pid" 2>/dev/null || kill -KILL "$filebrowser_pid" 2>/dev/null
+        fi
+        
+        # Signal failure to parent
+        return 1
+    fi
+    
+    # Store service PID for later reference
+    SERVICE_PIDS["filebrowser"]="$filebrowser_pid"
+    SERVICE_PORTS["filebrowser"]="$fb_port"
+    
+    return 0
 }
 
 # Enhanced model organization function
@@ -143,9 +223,9 @@ main() {
     
     # FileBrowser (non-critical)
     if [ "${FILEBROWSER:-false}" = "true" ]; then
-        if start_filebrowser & SERVICE_PIDS["filebrowser"]=$!; then
-            SERVICE_PORTS["filebrowser"]=8080
+        if start_filebrowser; then
             ((services_started++))
+            log "INFO" "FileBrowser started successfully"
         else
             log "WARN" "FileBrowser failed to start (non-critical)"
         fi
@@ -163,6 +243,11 @@ main() {
     # Start ComfyUI (critical service)
     log "INFO" "Starting ComfyUI (critical service)..."
     cd /ComfyUI
+    
+    # Set up trap for EXIT to ensure cleanup happens when ComfyUI terminates
+    trap 'cleanup_and_exit' EXIT
+    
+    # ComfyUI is the last component to start and should run in the foreground
     exec python3 main.py --listen 0.0.0.0 --port 7860
 }
 
