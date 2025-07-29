@@ -38,7 +38,7 @@ if [ -d "${DOWNLOAD_DIR}" ]; then
     
     echo ""
     echo "🔍 Debug: Looking for model files..."
-    find "${DOWNLOAD_DIR}" -type f \( -name "*.safetensors" -o -name "*.ckpt" -o -name "*.pt" -o -name "*.pth" -o -name "*.bin" \) | head -10 || echo "⚠️  No model files found with find command"
+    find "${DOWNLOAD_DIR}" -maxdepth 1 -type f \( -name "*.safetensors" -o -name "*.ckpt" -o -name "*.pt" -o -name "*.pth" -o -name "*.bin" \) | head -10 || echo "⚠️  No model files found with find command"
 else
     echo "❌ Directory ${DOWNLOAD_DIR} does not exist"
     echo "🔍 Debug: Checking parent directories..."
@@ -163,13 +163,14 @@ process_batch() {
 
 export -f process_batch move_or_link_file classify_model
 
+# Export function for sequential processing
 export -f process_single_file move_or_link_file classify_model
 
 # Find and process all model files
 if [ "$PARALLEL_ENABLED" = true ]; then
     echo "⚡ Processing files in parallel batches..."
-    # Create batches of 10 files each
-    find "${DOWNLOAD_DIR}" \( -type f \( -name "*.safetensors" -o -name "*.ckpt" -o -name "*.pt" -o -name "*.pth" -o -name "*.bin" \) -not -path "*/.git/*" -not -path "*/.github/*" \) -o \( -type d -name "models--*" -exec find {} -type f \( -name "*.safetensors" -o -name "*.ckpt" -o -name "*.pt" -o -name "*.pth" -o -name "*.bin" \) -not -path "*/.git/*" -not -path "*/.github/*" -print0 \; \) -print0 | \
+    # Create batches of 10 files each - simplified for flattened structure
+    find "${DOWNLOAD_DIR}" -maxdepth 1 -type f \( -name "*.safetensors" -o -name "*.ckpt" -o -name "*.pt" -o -name "*.pth" -o -name "*.bin" \) -print0 | \
         xargs -0 -n 10 | \
         parallel --bar --joblog /tmp/parallel_joblog --halt soon,fail=1 --progress --eta process_batch
     parallel_exit=$?
@@ -186,7 +187,7 @@ else
     while IFS= read -r -d '' filepath; do
         ((total_files++))
         process_single_file "$filepath"
-    done < <(find "${DOWNLOAD_DIR}" \( -type f \( -name "*.safetensors" -o -name "*.ckpt" -o -name "*.pt" -o -name "*.pth" -o -name "*.bin" \) -not -path "*/.git/*" -not -path "*/.github/*" \) -o \( -type d -name "models--*" -exec find {} -type f \( -name "*.safetensors" -o -name "*.ckpt" -o -name "*.pt" -o -name "*.pth" -o -name "*.bin" \) -not -path "*/.git/*" -not -path "*/.github/*" -print0 \; \) -print0)
+    done < <(find "${DOWNLOAD_DIR}" -maxdepth 1 -type f \( -name "*.safetensors" -o -name "*.ckpt" -o -name "*.pt" -o -name "*.pth" -o -name "*.bin" \) -print0)
 fi
 
 echo ""
@@ -245,6 +246,6 @@ if [ "$grand_total" -eq 0 ]; then
     echo "🔍 Debug information:"
     echo "  - Download directory: ${DOWNLOAD_DIR}"
     echo "  - Directory exists: $([ -d "${DOWNLOAD_DIR}" ] && echo "YES" || echo "NO")"
-    echo "  - Files in directory: $(find "${DOWNLOAD_DIR}" -type f | wc -l)"
-    echo "  - Model files found: $(find "${DOWNLOAD_DIR}" -type f \( -name "*.safetensors" -o -name "*.ckpt" -o -name "*.pt" -o -name "*.pth" -o -name "*.bin" \) | wc -l)"
+    echo "  - Files in directory: $(find "${DOWNLOAD_DIR}" -maxdepth 1 -type f | wc -l)"
+    echo "  - Model files found: $(find "${DOWNLOAD_DIR}" -maxdepth 1 -type f \( -name "*.safetensors" -o -name "*.ckpt" -o -name "*.pt" -o -name "*.pth" -o -name "*.bin" \) | wc -l)"
 fi

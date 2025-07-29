@@ -556,12 +556,24 @@ organize_models() {
     # Efficient file flattening with progress tracking
     log_info "📂 Flattening download directory structure..."
     local file_count=0
-    # Flatten Hugging Face cache into downloads directory
-    if [ -d "$HF_CACHE/hub" ]; then
-        find "$HF_CACHE/hub" -type f -exec mv -t /downloads {} +
-        # Clean up empty cache directories
-        rm -rf "$HF_CACHE"
-    fi
+    
+    # Find and move all model files from nested subdirectories
+    find "${DOWNLOAD_DIR}" -mindepth 2 -type f \( -name "*.safetensors" -o -name "*.bin" -o -name "*.pth" -o -name "*.ckpt" \) -print0 | while IFS= read -r -d '' file; do
+        filename=$(basename "$file")
+        if [ ! -f "${DOWNLOAD_DIR}/${filename}" ]; then
+            log_info "📦 Moving: $file -> ${DOWNLOAD_DIR}/${filename}"
+            if mv "$file" "${DOWNLOAD_DIR}/${filename}" 2>/dev/null; then
+                file_count=$((file_count + 1))
+            else
+                log_error "Failed to move $file"
+            fi
+        else
+            log_info "⚠️  File already exists: ${filename}, skipping"
+        fi
+    done
+    
+    # Clean up empty directories left behind
+    find "${DOWNLOAD_DIR}" -mindepth 1 -type d -empty -delete 2>/dev/null || true
     
     log_info "📂 Moved $file_count model files to download directory"
     
