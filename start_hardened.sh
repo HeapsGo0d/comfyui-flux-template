@@ -28,7 +28,13 @@
 # - Smart caching strategies
 # =============================================================================
 
-set -euo pipefail
+DEBUG_MODE=$(echo "${DEBUG_MODE:-false}" | tr '[:upper:]' '[:lower:]')
+if [ "$DEBUG_MODE" = "true" ]; then
+    set -euxo pipefail
+    echo "🐛 Debug mode enabled."
+else
+    set -euo pipefail
+fi
 
 # Global configuration
 readonly SCRIPT_NAME="$(basename "$0")"
@@ -541,6 +547,20 @@ EOF
 organize_models() {
     log_info "🔧 Organizing all downloaded models..."
     
+    log_info "🔍 Flattening HuggingFace caches..."
+    if [ -d "${DOWNLOAD_DIR}" ]; then
+        find "${DOWNLOAD_DIR}" -type d -name "models--*" -print0 |
+        while IFS= read -r -d '' hf_dir; do
+            find "$hf_dir" -type f \( -name "*.safetensors" -o -name "*.bin" -o -name "*.pth" \) -print0 |
+            while IFS= read -r -d '' model_file; do
+                filename=$(basename "$model_file")
+                if [ ! -f "${DOWNLOAD_DIR}/${filename}" ]; then
+                    cp "$model_file" "${DOWNLOAD_DIR}/${filename}"
+                fi
+            done
+        done
+    fi
+
     # Validate download directory
     if [ ! -d "$DOWNLOAD_DIR" ]; then
         log_error "Download directory does not exist: $DOWNLOAD_DIR"
@@ -593,68 +613,6 @@ organize_models() {
     return 0
 }
 
-# ─── 5️⃣ SECURE JupyterLab Setup ─────────────────────────────────────────────
-start_jupyter() {
-    if ! command -v jupyter >/dev/null 2>&1; then
-        log_info "⚠️  JupyterLab not installed, skipping..."
-        return 0
-    fi
-    
-    # Check port availability
-    if ! check_port_available 8888; then
-        log_error "Port 8888 already in use, cannot start JupyterLab"
-        return 1
-    fi
-    
-    log_info "🔬 Starting SECURE JupyterLab on port 8888..."
-    
-    # Secure token handling
-    local jupyter_token
-    jupyter_token=$(sanitize_env_var "JUPYTER_TOKEN")
-    
-    # Generate secure token if not provided
-    if [ -z "$jupyter_token" ] || [ "$jupyter_token" = "*tokenOrLeaveBlank*" ]; then
-        jupyter_token=$(generate_secure_password 32)
-        log_security "Generated secure JupyterLab token"
-    fi
-    
-    # Create secure log file
-    local jupyter_log="/tmp/jupyter.log"
-    touch "$jupyter_log"
-    chmod 600 "$jupyter_log"
-    
-    # Start JupyterLab with SECURITY ENABLED
-    jupyter lab \
-        --ip=0.0.0.0 \
-        --port=8888 \
-        --no-browser \
-        --allow-root \
-        --ServerApp.token="$jupyter_token" \
-        --ServerApp.password='' \
-        --ServerApp.allow_origin='*' \
-        --ServerApp.allow_remote_access=True \
-        --ServerApp.disable_check_xsrf=False \
-        --notebook-dir="$BASEDIR" \
-        --LabApp.check_for_updates_frequency=0 \
-        --ServerApp.terminado_settings='{"shell_command": ["/bin/bash"]}' \
-        --ServerApp.allow_credentials=True > "$jupyter_log" 2>&1 &
-    
-    local jupyter_pid=$!
-    SERVICE_PIDS["jupyter"]=$jupyter_pid
-    SERVICE_PORTS["jupyter"]=8888
-    
-    # Health check
-    if check_service_health "JupyterLab" 8888; then
-        log_info "🔬 JupyterLab: http://0.0.0.0:8888 (SECURE - token required)"
-        log_security "JupyterLab started with security enabled"
-        # Note: Token not logged for security
-    else
-        log_error "JupyterLab failed to start properly"
-        return 1
-    fi
-    
-    return 0
-}
 
 # ─── 6️⃣ SYSTEM Verification ─────────────────────────────────────────────────
 verify_system() {
@@ -751,27 +709,30 @@ start_comfyui() {
 # ─── MAIN EXECUTION FLOW ─────────────────────────────────────────────────────
 
 main() {
-    log_info "Starting hardened ComfyUI container initialization..."
-    
-    # Execute all setup steps with comprehensive error handling
-    local steps=(
-        "start_filebrowser"
-        "download_civitai_models"
-        "download_huggingface_models"
-        "organize_models"
-        "start_jupyter"
-        "verify_system"
-        "start_comfyui"
+    log_info "Starting hardened ComfyUI container..."
+    steps=(
+        start_filebrowser
+        download_civitai_models
+        download_huggingface_models
+        organize_models
+        verify_system
+        start_comfyui
     )
-    
+    critical_steps=(download_huggingface_models start_comfyui)
     for step in "${steps[@]}"; do
-        log_info "Executing step: $step"
-        if ! "$step"; then
-            log_error "Step failed: $step"
-            exit 1
+        log_info "Executing $step"
+        if $step; then
+            log_info "✅ $step succeeded"
+        else
+            if [[ " ${critical_steps[*]} " =~ " ${step} " ]]; then
+                log_error "⛔ Critical failure: $step"
+                exit 1
+            else
+                log_error "⚠️ Non-critical failure: $step (continuing)"
+            fi
         fi
-        log_info "Step completed successfully: $step"
     done
+    log_info "✨ Initialization complete"
 }
 
 # Execute main function

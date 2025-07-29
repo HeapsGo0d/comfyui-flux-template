@@ -108,13 +108,35 @@ classify_model() {
     esac
 }
 
-# Process all model files
-echo "🔍 Scanning for model files..."
-total_files=0
+# Function to process a single file (needed for sequential processing)
+process_single_file() {
+    local filepath="$1"
+    
+    if [ ! -f "$filepath" ]; then
+        echo "⚠️  File does not exist: $filepath"
+        return 0
+    fi
+    
+    echo "📄 Processing: $filepath"
+    
+    # Get classification
+    classification=$(classify_model "$filepath")
+    dest_dir=$(echo "$classification" | cut -d'|' -f1)
+    model_type=$(echo "$classification" | cut -d'|' -f2)
+    
+    filename="$(basename "$filepath")"
+    dest_file="${dest_dir}/${filename}"
+    
+    if move_or_link_file "$filepath" "$dest_file" "$model_type"; then
+        return 0
+    else
+        return 1
+    fi
+}
 
 # Process files function for parallel execution (batch version)
 process_batch() {
-    batch_files="$1"
+    local batch_files="$1"
     batch_size=$(echo "$batch_files" | wc -w)
     echo "📦 Processing batch of $batch_size files"
     
@@ -150,8 +172,10 @@ process_batch() {
         # Calculate and display progress
         current_time=$(date +%s)
         elapsed=$((current_time - start_time))
-        remaining=$(( (elapsed * (batch_size - processed_count)) / processed_count ))
-        echo "⏱️  Progress: $processed_count/$batch_size | Elapsed: ${elapsed}s | Remaining: ~${remaining}s"
+        if [ $processed_count -gt 0 ]; then
+            remaining=$(( (elapsed * (batch_size - processed_count)) / processed_count ))
+            echo "⏱️  Progress: $processed_count/$batch_size | Elapsed: ${elapsed}s | Remaining: ~${remaining}s"
+        fi
     done
     
     if [ $batch_failures -gt 0 ]; then
@@ -161,10 +185,13 @@ process_batch() {
     return 0
 }
 
+# Export functions for parallel processing
 export -f process_batch move_or_link_file classify_model
+export -f process_single_file  # Now this function exists!
 
-# Export function for sequential processing
-export -f process_single_file move_or_link_file classify_model
+# Process all model files
+echo "🔍 Scanning for model files..."
+total_files=0
 
 # Find and process all model files
 if [ "$PARALLEL_ENABLED" = true ]; then
@@ -180,8 +207,11 @@ if [ "$PARALLEL_ENABLED" = true ]; then
         echo "🔍 Check /tmp/parallel_joblog for details"
     fi
     
-    total_files=$(wc -l < /tmp/parallel_joblog)
-    ((total_files--)) # Subtract header line
+    # Count total files processed
+    if [ -f /tmp/parallel_joblog ]; then
+        total_files=$(wc -l < /tmp/parallel_joblog)
+        ((total_files--)) # Subtract header line
+    fi
 else
     echo "🐌 Processing files sequentially..."
     while IFS= read -r -d '' filepath; do
@@ -200,7 +230,7 @@ find "${DOWNLOAD_DIR}" -type d -empty -delete 2>/dev/null || true
 
 # Clean up temporary files created by parallel processing
 [ -f "/tmp/parallel_joblog" ] && rm -f "/tmp/parallel_joblog"
-find /tmp -name "parallel_*" -user "$(whoami)" -mtime +1 -exec rm -f {} \;
+find /tmp -name "parallel_*" -user "$(whoami)" -mtime +1 -exec rm -f {} \; 2>/dev/null || true
 
 echo ""
 echo "✅ Organization complete!"
@@ -248,4 +278,8 @@ if [ "$grand_total" -eq 0 ]; then
     echo "  - Directory exists: $([ -d "${DOWNLOAD_DIR}" ] && echo "YES" || echo "NO")"
     echo "  - Files in directory: $(find "${DOWNLOAD_DIR}" -maxdepth 1 -type f | wc -l)"
     echo "  - Model files found: $(find "${DOWNLOAD_DIR}" -maxdepth 1 -type f \( -name "*.safetensors" -o -name "*.ckpt" -o -name "*.pt" -o -name "*.pth" -o -name "*.bin" \) | wc -l)"
+    
+    # Additional debugging - check if files are in subdirectories
+    echo "  - Files in subdirectories:"
+    find "${DOWNLOAD_DIR}" -type f \( -name "*.safetensors" -o -name "*.ckpt" -o -name "*.pt" -o -name "*.pth" -o -name "*.bin" \) | head -5
 fi
